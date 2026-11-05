@@ -1,0 +1,33 @@
+{
+  "name": "codex-quota-widget",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "tauri": "tauri",
+    "desktop:dev": "bash scripts/desktop.sh dev",
+    "desktop:build": "bash scripts/desktop.sh build --bundles app",
+    "test:rust": "bash scripts/rust-test.sh"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.10.0",
+    "@tauri-apps/plugin-autostart": "^2.5.0",
+    "lucide-react": "^0.562.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.1",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.6.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.20.5",
+    "typescript": "~5.8.3",
+    "vite": "^7.0.4"
+  }
+}

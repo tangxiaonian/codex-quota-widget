@@ -1,0 +1,11 @@
+node_modules/
+dist/
+src-tauri/target/
+.toolchain/
+.DS_Store
+verification/private/
+
+.playwright-cli/
+output/
+.workbuddy/
+prototype/
