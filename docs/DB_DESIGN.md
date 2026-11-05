@@ -15,7 +15,7 @@ SQLite 文件位于 `~/Library/Application Support/local.codex.quota-widget/widg
 | id | INTEGER | 主键且固定为 1 |
 | payload | TEXT | NOT NULL，设置 JSON |
 
-设置字段：compact、autoRefresh、refreshMinutes（1–60）、alwaysOnTop、followCodex、showTrayIcon、x、y。showTrayIcon 为旧数据兼容字段，读取缺失时默认 true。x/y 为可空物理像素坐标。登录启动实际状态由系统插件读取，不用设置值伪装已启用。
+设置字段：compact、autoRefresh、refreshMinutes（1–60）、alwaysOnTop、followCodex、showTrayIcon、x、y、expandedSize。showTrayIcon 为旧数据兼容字段，读取缺失时默认 true。x/y 为可空物理像素坐标，允许副屏产生的负坐标。expandedSize 为可空 `{width, height}` 逻辑点尺寸，旧数据缺失时默认为 null，展开态默认 368×524，保存尺寸下限为 330×260；迷你态固定 360×104。登录启动实际状态由系统插件读取，不用设置值伪装已启用。
 
 ### account_cache
 
@@ -55,7 +55,7 @@ SQLite 文件位于 `~/Library/Application Support/local.codex.quota-widget/widg
 
 ## 关系与事务
 
-quota_window 和 reset_credit 的 account_key 外键关联 account_cache，ON DELETE CASCADE。每次连接启用 `PRAGMA foreign_keys=ON`，schema 版本 `user_version=1`。
+quota_window 和 reset_credit 的 account_key 外键关联 account_cache，ON DELETE CASCADE。应用启动时创建并复用 SQLite 连接，开启 `PRAGMA foreign_keys=ON`，schema 版本 `user_version=1`。
 
 成功快照写入同一个事务：删除旧账户快照，插入新账户、窗口、卡片。设置表不受影响。失败回滚，不留下半份快照。
 
@@ -66,3 +66,5 @@ quota_window 和 reset_credit 的 account_key 外键关联 account_cache，ON DE
 不保存 token、Cookie、密码、认证文件、完整响应或聊天内容。查询参数绑定。数据库是缓存，消费前必须重新核对服务端身份及卡片。
 
 已测试：首次创建、重开、偏好持久化、替换账号后仅保留新快照及窗口。尚无 v2 迁移；新增版本时须先实现迁移，不能悄悄清空设置。
+
+本次只扩展设置 JSON 可选字段，不改表结构，schema 仍为 v1。Rust 测试覆盖旧 JSON 兼容与展开尺寸重开后保持。

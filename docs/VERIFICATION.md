@@ -64,7 +64,7 @@ tray 图标实际隐藏的系统级效果（菜单栏区域视觉确认）受录
 
 ## 消费代码审查
 
-消费入口仅在 App.tsx 的显式确认处理器调用 bridge.consume。refresh、定时器和 --read-only-check 均无消费调用。provider.consume 校验非空卡 ID、UUID、账号一致、卡片存在且有效；传准确 creditId；结果超时不重试。
+消费入口仅在 hooks/useRedemption.ts 的显式确认处理器调用 bridge.consume。refresh、定时器和 --read-only-check 均无消费调用。provider.consume 校验非空卡 ID、UUID、账号一致、卡片存在且有效；传准确 creditId；结果超时不重试。
 
 模拟协议断言：选择较晚到期的 B，消费参数仍为 B；账户不符时消费调用为零；失败最多一次消费请求。浏览器演示在内存模拟，不连真实服务。
 
@@ -75,3 +75,27 @@ tray 图标实际隐藏的系统级效果（菜单栏区域视觉确认）受录
 登录启动注册、系统重启、真实休眠、完整 Codex 重启、账号与工作区切换、多屏、旧系统、持续资源测量。为避免打断正在进行的 Codex 工作，本轮没有主动退出 Codex 或切换其账户。
 
 当前包为本机 Debug 构建，没有 Developer ID 签名、公证和公开发布。基础只读链路实测通过不等于以上所有兼容性验收通过。
+
+## 2026-11-05 夜间：窗口修复与工程化
+
+- 基线：main / 3d6d7af，开始时工作区干净；本轮未提交代码。
+- `npm test`：10 项通过，新增模式切换停止隐藏、刷新不重设大小、展开尺寸跨模式和控制器重建保留、副屏负坐标/不同缩放、断屏回退和完整工作区约束、首次位置避开吸附区。
+- `npm run test:rust`：8 项通过；旧设置无 expandedSize 默认 null；实际 SQLite 关闭重开后尺寸保留；指定卡 B 和消费不重试仍使用替身。
+- `npm run test:native`：真实 AppKit 临时窗口通过。覆盖隐藏完成后退出、淡出中途取消、显式显示后鼠标离开仍可见、拖离顶部退出；同时断言原始位置不被隐藏动画改变。
+- 原生演示完整应用：360×104 迷你条启动；显式显示将 alpha 从 0 恢复到 1；鼠标展开到 368×524；拖动左下角得到 531×706；收起、顶部悬停恢复、展开、鼠标移出后保持 531×706 且 alpha=1。
+- 浏览器演示：自定义 7 分钟生效，选择第二张卡的确认页绑定 B，模拟使用后仅 A 保留；收起成功；控制台 Errors=0、Warnings=0。
+- 新截图：`output/playwright/refactor-native-mini.png`、`refactor-native-expanded.png`、`refactor-native-resized.png`、`refactor-confirmation.png`、`refactor-expanded.png`、`refactor-mini.png`。
+
+### 本轮资源采样边界
+
+- 调整前运行一次 `--read-only-check`：wall time 1.92s；没有发起消费，不启动模型回合。单次测量不代表稳定网络延迟，也未拆分进程启动和网络耗时；因此没有据此改成长连接。
+- `CQ_WIDGET_BENCHMARK=1 npm run test:native`：隐藏状态 3s，AppKit 测试进程平均 CPU 0.236%，最大 RSS 42.97 MiB。这是直接运行生产隐藏模块的临时测试窗口，不是 Tauri 主进程/WebKit/App Server 完整进程树指标，也不是长期续航测量。
+- 完整原生应用可见性和尺寸使用 CoreGraphics 窗口信息核对；物理多屏、真实休眠、账号切换仍未覆盖。几何单元测试不冒充物理多屏验收。
+
+本轮真实服务仅只读；重置卡调用仅发生在 Fake Transport 与浏览器内存演示中。
+
+- 打包：Debug 构建通过；最终 `npm run desktop:build` Release 构建通过，生成 `src-tauri/target/release/bundle/macos/Codex Quota Widget.app`，约 12.36 MiB。这是本机优化构建，未做正式分发签名/公证。
+
+- Release 独立数据目录持久化验收：原生窗口实际拖到 552×740；只读查询测试 SQLite 确认 expandedSize 已保存；终止并重新启动后 CoreGraphics 报告仍为 552×740、alpha=1。该验收只读真实额度，没有操作重置卡，未改用户正常配置。
+
+- 已结束演示及隔离验收进程，启动最终 Release 应用并恢复用户原有配置；未启用登录启动、未提交 Git。

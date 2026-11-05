@@ -2,13 +2,14 @@ mod model;
 mod provider;
 mod rpc;
 mod storage;
+mod window;
 use model::{Preferences, Snapshot};
 use serde::Serialize;
 use std::{
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
-        OnceLock,
+        Mutex, OnceLock,
     },
 };
 use tauri::{
@@ -21,7 +22,7 @@ static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
 static SLEEPING: AtomicBool = AtomicBool::new(false);
 static REDUCED: AtomicBool = AtomicBool::new(false);
 struct State {
-    path: PathBuf,
+    storage: Mutex<storage::Storage>,
     busy: AtomicBool,
 }
 #[derive(Clone, Serialize)]
@@ -42,10 +43,7 @@ struct Bootstrap {
 #[cfg(target_os = "macos")]
 extern "C" {
     fn cq_codex_running() -> bool;
-    fn cq_bring_to_front(window: *mut std::ffi::c_void);
     fn cq_observe(callback: extern "C" fn(bool, bool, bool));
-    fn cq_arm_top_hide(window: *mut std::ffi::c_void);
-    fn cq_disarm_top_hide();
 }
 /// Relay native events to the UI without polling the process table.
 extern "C" fn on_workspace(running: bool, sleeping: bool, reduce: bool) {
@@ -77,7 +75,7 @@ fn lifecycle() -> Lifecycle {
 #[tauri::command]
 /// Load the local UI state; this command never contacts an account service.
 fn bootstrap(state: tauri::State<State>) -> Result<Bootstrap, String> {
-    let db = storage::Storage::open(&state.path)?;
+    let db = state.storage.lock().map_err(|_| "本地存储不可用")?;
     Ok(Bootstrap {
         preferences: db.preferences()?,
         cached: db.snapshot()?,
@@ -93,20 +91,28 @@ fn save_preferences(
     app: tauri::AppHandle,
     preferences: Preferences,
 ) -> Result<(), String> {
-    storage::Storage::open(&state.path)?.save_preferences(&preferences)?;
-    if let Some(tray) = app.tray_by_id("main-tray") {
-        let _ = tray.set_visible(preferences.show_tray_icon);
+    let db = state.storage.lock().map_err(|_| "本地存储不可用")?;
+    let previous = db.preferences()?;
+    db.save_preferences(&preferences)?;
+    if previous.show_tray_icon != preferences.show_tray_icon {
+        if let Some(tray) = app.tray_by_id("main-tray") {
+            tray.set_visible(preferences.show_tray_icon)
+                .map_err(|_| "更新菜单栏图标失败")?;
+        }
     }
     Ok(())
 }
 #[tauri::command]
 /// Fetch live read-only data off the event loop, then atomically cache the safe view model.
-async fn refresh_snapshot(state: tauri::State<'_, State>) -> Result<Snapshot, String> {
-    let path = state.path.clone();
+async fn refresh_snapshot(app: tauri::AppHandle) -> Result<Snapshot, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let mut rpc = rpc::Rpc::connect()?;
         let snapshot = provider::read_snapshot(&mut rpc)?;
-        storage::Storage::open(&path)?.save_snapshot(&snapshot)?;
+        app.state::<State>()
+            .storage
+            .lock()
+            .map_err(|_| "本地存储不可用")?
+            .save_snapshot(&snapshot)?;
         Ok(snapshot)
     })
     .await
@@ -132,24 +138,6 @@ async fn consume_credit(
     state.busy.store(false, Ordering::SeqCst);
     result?
 }
-#[tauri::command]
-/// Park the compact mini bar at the top edge; the native layer animates and watches the cursor.
-fn arm_top_hide(window: tauri::WebviewWindow) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        let pointer = window.ns_window().map_err(|e| e.to_string())?;
-        unsafe { cq_arm_top_hide(pointer) };
-    }
-    Ok(())
-}
-#[tauri::command]
-/// Stop the cursor watcher; the window stays where it is (used when leaving the compact mode).
-fn disarm_top_hide() {
-    #[cfg(target_os = "macos")]
-    unsafe {
-        cq_disarm_top_hide()
-    };
-}
 /// Draw a small template tray icon without bundling a font or downloading artwork.
 fn tray_image() -> tauri::image::Image<'static> {
     let mut pixels = vec![0u8; 22 * 22 * 4];
@@ -163,28 +151,11 @@ fn tray_image() -> tauri::image::Image<'static> {
     }
     tauri::image::Image::new_owned(pixels, 22, 22)
 }
-/// User-invoked show restores and activates the card; automatic lifecycle showing stays passive.
-fn show_card(app: &tauri::AppHandle) {
-    let handle = app.clone();
-    let _ = app.run_on_main_thread(move || {
-        if let Some(window) = handle.get_webview_window("main") {
-            let _ = window.unminimize();
-            let _ = window.show();
-            let _ = window.set_focus();
-            #[cfg(target_os = "macos")]
-            if let Ok(pointer) = window.ns_window() {
-                unsafe {
-                    cq_bring_to_front(pointer);
-                }
-            }
-        }
-    });
-}
 /// Install menu, native lifecycle observation and the narrow application command surface.
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            show_card(app);
+            window::show_card(app);
         }))
         .plugin(
             tauri_plugin_autostart::Builder::new()
@@ -198,8 +169,10 @@ pub fn run() {
                 .map(PathBuf::from)
                 .unwrap_or(app.path().app_data_dir()?)
                 .join("widget.sqlite3");
+            let storage = storage::Storage::open(&path)?;
+            let show_tray = storage.preferences()?.show_tray_icon;
             app.manage(State {
-                path: path.clone(),
+                storage: Mutex::new(storage),
                 busy: AtomicBool::new(false),
             });
             let _ = APP.set(app.handle().clone());
@@ -222,14 +195,14 @@ pub fn run() {
                     if let Some(w) = app.get_webview_window("main") {
                         match event.id.as_ref() {
                             "show" => {
-                                show_card(app);
+                                window::show_card(app);
                                 let _ = app.emit("menu-action", "show");
                             }
                             "hide" => {
-                                let _ = w.hide();
+                                window::hide_card(&w);
                             }
                             "settings" => {
-                                show_card(app);
+                                window::show_card(app);
                                 let _ = app.emit("menu-action", "settings");
                             }
                             "refresh" => {
@@ -241,12 +214,7 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
-            // Restore the stored tray visibility before the UI asks for anything.
-            if let Ok(db) = storage::Storage::open(&path) {
-                if let Ok(prefs) = db.preferences() {
-                    let _ = tray.set_visible(prefs.show_tray_icon);
-                }
-            }
+            tray.set_visible(show_tray)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -254,8 +222,8 @@ pub fn run() {
             save_preferences,
             refresh_snapshot,
             consume_credit,
-            arm_top_hide,
-            disarm_top_hide
+            window::arm_top_hide,
+            window::disarm_top_hide
         ])
         .run(tauri::generate_context!())
         .expect("无法启动额度卡片");

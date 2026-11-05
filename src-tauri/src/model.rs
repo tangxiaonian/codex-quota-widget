@@ -47,9 +47,17 @@ pub struct Snapshot {
     pub credits: Vec<Credit>,
     pub fetched_at: i64,
 }
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WindowSize {
+    pub width: f64,
+    pub height: f64,
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Preferences {
+    /// Logical points; absent in older saved preferences.
+    #[serde(default)]
+    pub expanded_size: Option<WindowSize>,
     pub compact: bool,
     pub auto_refresh: bool,
     pub refresh_minutes: u32,
@@ -68,6 +76,7 @@ impl Default for Preferences {
     /// New installs begin in the unobtrusive compact layout.
     fn default() -> Self {
         Self {
+            expanded_size: None,
             compact: true,
             auto_refresh: true,
             refresh_minutes: 5,
@@ -82,6 +91,15 @@ impl Default for Preferences {
 impl Preferences {
     /// Reject invalid intervals rather than silently persisting an unusable timer.
     pub fn validate(&self) -> Result<(), String> {
+        if let Some(size) = &self.expanded_size {
+            if !size.width.is_finite()
+                || !size.height.is_finite()
+                || size.width < 330.0
+                || size.height < 260.0
+            {
+                return Err("展开卡片尺寸不能小于 330×260".into());
+            }
+        }
         if (1..=60).contains(&self.refresh_minutes) {
             Ok(())
         } else {
@@ -220,5 +238,6 @@ mod tests {
         )
         .unwrap();
         assert!(p.show_tray_icon);
+        assert!(p.expanded_size.is_none());
     }
 }

@@ -31,24 +31,34 @@ flowchart LR
 
 | 文件 | 职责 |
 |---|---|
-| src/App.tsx | 精简/展开、设置、卡片列表、明确的消费确认 |
+| src/App.tsx | 页面组合、导航和状态反馈 |
+| src/components/ | 卡片头部、额度展示、设置页、卡片列表、消费确认 |
+| src/hooks/useRedemption.ts | 唯一显式消费处理器，捕获账号/卡片/幂等键 |
+| src/hooks/useWindowBehavior.ts | 绑定移动/缩放事件，防抖保存 |
+| src/window/controller.ts | 模式切换先停止隐藏，记录各视图尺寸 |
+| src/window/geometry.ts | 多屏物理坐标与逻辑尺寸、工作区约束 |
+| src/window/bridge.ts | Tauri 窗口 API，账户 IPC 与窗口 API 分离 |
 | src/Gauge.tsx | SVG 分段光环与终点微光 |
 | src/useWidget.ts | 刷新调度、生命周期、陈旧状态 |
 | src/bridge.ts | Tauri IPC 与完全隔离的浏览器演示数据 |
 | src/model.ts | 时间、比例和卡片显示规则 |
-| src-tauri/src/lib.rs | 命令注册、菜单栏、原生事件转发 |
+| src-tauri/src/lib.rs | 命令注册、菜单栏、原生事件转发、共享 SQLite 连接 |
+| src-tauri/src/window.rs | 窗口显隐与顶部隐藏命令 |
 | src-tauri/src/rpc.rs | 发现 Codex、stdio 握手、请求匹配和超时 |
 | src-tauri/src/provider.rs | 查询、账号复核、指定卡片消费 |
 | src-tauri/src/model.rs | 上游字段归一化 |
 | src-tauri/src/storage.rs | 四张 SQLite 表与事务 |
 | src-tauri/native/workspace.m | 按 bundle ID 监听应用，不扫描进程表 |
+| src-tauri/native/top_hide.m | 顶部停靠、淡出/恢复、鼠标监测与提示条 |
 
 ## IPC 接口
 
 | 命令 | 参数 | 结果/约束 |
 |---|---|---|
 | bootstrap | 无 | 设置、缓存、生命周期、是否演示模式；无网络请求 |
-| save_preferences | preferences | 校验 1–60 分钟并保存 |
+| save_preferences | preferences | 校验刷新间隔和展开尺寸；仅图标偏好改变时更新托盘 |
+| arm_top_hide | 无 | 仅迷你态调用；按窗口所在屏幕工作区检查顶部距离 |
+| disarm_top_hide | 无 | 停止鼠标和动画定时器，恢复透明度/鼠标响应 |
 | refresh_snapshot | 无 | 读取真实账号和额度，写成功快照；不消费 |
 | consume_credit | accountKey / creditId / attemptId | 仅确认按钮调用；精确所选 ID；无自动重试 |
 
@@ -81,6 +91,11 @@ flowchart LR
 - 倒计时在可见时每 30 秒检查，展示到分钟；不产生周期消费请求。
 - Codex 退出时隐藏并暂停自动刷新；休眠暂停，唤醒按运行状态更新。
 - 主线程显示；阻塞 RPC、网络和快照写入放在后台任务。
+- 顶部隐藏只淡出，不移动窗口；动画不会制造坐标事件或错误的位置存档。退出迷你态、隐藏卡片或显式显示时，取消隐藏和动画并恢复输入。
+- 恢复位置遍历所有显示器，支持负坐标和不同缩放比例；按对应屏幕工作区约束完整窗口。顶部热区使用 AppKit 窗口自身 screen，不使用 mainScreen。
+- 展开尺寸 expandedSize 使用逻辑点持久化；精简态固定 360×104，设置和确认页尺寸只在本次运行记忆。切换模式时同步调整最小尺寸，刷新不触发窗口缩放。
+- SQLite 在启动时初始化并复用 Mutex 保护的连接；RPC 在锁外执行。移动/缩放保存防抖 500ms，置顶和图标操作仅在对应偏好改变时执行。
+- 停靠状态仍以 200ms 检查鼠标，增加 40ms 容差供系统合并唤醒；退出停靠立即停止。保留短生命周期 App Server，不为未测定的收益引入常驻连接。
 - 网络失败保留缓存并标记，不视为实时数据。明确未登录或认证类型不支持时清空界面快照。
 
 ## 打包与验证

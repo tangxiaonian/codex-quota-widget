@@ -10,7 +10,8 @@
     "tauri": "tauri",
     "desktop:dev": "bash scripts/desktop.sh dev",
     "desktop:build": "bash scripts/desktop.sh build --bundles app",
-    "test:rust": "bash scripts/rust-test.sh"
+    "test:rust": "bash scripts/rust-test.sh",
+    "test:native": "bash scripts/test-native.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.0",

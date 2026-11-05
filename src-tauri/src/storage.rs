@@ -115,6 +115,10 @@ mod tests {
         let mut db = Storage::open(&path).unwrap();
         let mut p = Preferences::default();
         p.refresh_minutes = 15;
+        p.expanded_size = Some(crate::model::WindowSize {
+            width: 530.0,
+            height: 760.0,
+        });
         db.save_preferences(&p).unwrap();
         for id in ["first", "second"] {
             let s=normalize(&json!({"account":{"type":"chatgpt"}}),&json!({"accountId":id,"rateLimits":{"primary":{"windowDurationMins":300,"usedPercent":25}},"rateLimitResetCredits":{"availableCount":0,"credits":[]}}),10).unwrap();
@@ -124,6 +128,7 @@ mod tests {
         drop(db);
         let db = Storage::open(&path).unwrap();
         assert_eq!(db.preferences().unwrap().refresh_minutes, 15);
+        assert_eq!(db.preferences().unwrap().expanded_size, p.expanded_size);
         assert_eq!(db.snapshot().unwrap().unwrap().windows.len(), 1);
         drop(db);
         std::fs::remove_file(path).unwrap();

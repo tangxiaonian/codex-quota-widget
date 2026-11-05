@@ -6,7 +6,7 @@
 
 **开发和验证期间禁止真实调用重置卡消费接口。只做代码审查与模拟测试，真实操作留给用户自行点击使用。** 这项约束覆盖旧文档中的真实用卡验收要求。
 
-当前没有初始化 Git，不自动初始化、提交或推送。进入目录先确认已有改动和实际环境。
+当前已建立 Git 仓库。进入目录先确认分支和已有改动；不自动提交或推送。
 
 ## 阅读顺序
 
@@ -21,7 +21,11 @@
 Tauri 2、Rust、React 19、TypeScript 5.8、Vite 7、SQLite/rusqlite；少量 Objective-C 用于 NSWorkspace 原生事件，无 SwiftUI。部署目标 macOS 13+，实测 macOS 26.6.2 arm64。版本锁见 Cargo.lock 与 package-lock.json。
 
 ```text
-src/                 # React 界面、模型、IPC、刷新调度
+src/App.tsx          # 页面组合与导航
+src/components/      # 头部、额度、卡片列表、设置、确认等视图
+src/hooks/           # 用卡流程与窗口事件绑定
+src/window/          # 窗口控制、屏幕几何和 Tauri 窗口适配
+src/                 # 模型、账户 IPC、刷新调度
 src-tauri/src/       # Rust 命令、RPC、数据解析、存储
 src-tauri/native/    # macOS 事件桥接
 src-tauri/icons/     # 本项目图标
@@ -42,6 +46,7 @@ npm run dev                      # 浏览器假数据预览
 npm run build                    # TypeScript + Vite
 npm test                         # 不访问网络的显示逻辑测试
 npm run test:rust                # Rust 模拟协议、模型、数据库测试
+npm run test:native              # AppKit 临时窗口回归，需桌面会话；不访问账号
 npm run desktop:build -- --debug # 本机可运行 .app
 npm run desktop:dev              # 原生开发模式，会读取真实额度
 ```

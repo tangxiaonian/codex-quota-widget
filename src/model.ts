@@ -26,7 +26,12 @@ export interface Snapshot {
   credits: Credit[];
   fetchedAt: number;
 }
+export interface WindowSize {
+  width: number;
+  height: number;
+}
 export interface Preferences {
+  expandedSize: WindowSize | null;
   compact: boolean;
   autoRefresh: boolean;
   refreshMinutes: number;
@@ -48,6 +53,7 @@ export interface Bootstrap {
   demo?: boolean;
 }
 export const defaults: Preferences = {
+  expandedSize: null,
   compact: true,
   autoRefresh: true,
   refreshMinutes: 5,

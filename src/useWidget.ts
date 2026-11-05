@@ -53,12 +53,14 @@ export function useWidget() {
   }, []);
   /** Apply a settings change and persist a single coherent preferences object. */
   const update = useCallback(async (patch: Partial<Preferences>) => {
-    const next = { ...prefsRef.current, ...patch };
+    const previous = prefsRef.current;
+    const next = { ...previous, ...patch };
     prefsRef.current = next;
     setPreferences(next);
     try {
       await bridge.save(next);
-      await bridge.pin(next.alwaysOnTop);
+      if (next.alwaysOnTop !== previous.alwaysOnTop)
+        await bridge.pin(next.alwaysOnTop);
     } catch (e) {
       setError(String(e));
     }
@@ -104,16 +106,6 @@ export function useWidget() {
             if (action === "refresh" || action === "show") void refresh();
           }),
         );
-        let moveTimer: ReturnType<typeof setTimeout>;
-        cleanup.push(
-          await bridge.onMove((x, y) => {
-            clearTimeout(moveTimer);
-            // Park animation emits off-screen coordinates; never persist those.
-            if (y < 0) return;
-            moveTimer = setTimeout(() => void update({ x, y }), 500);
-          }),
-        );
-        cleanup.push(() => clearTimeout(moveTimer));
         if (b.lifecycle.running || !b.preferences.followCodex || b.demo)
           void refresh();
       } catch (e) {
@@ -206,3 +198,5 @@ export function useWidget() {
     setNotice,
   };
 }
+
+export type WidgetState = ReturnType<typeof useWidget>;
