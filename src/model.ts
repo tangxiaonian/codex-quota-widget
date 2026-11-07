@@ -31,6 +31,7 @@ export interface WindowSize {
   height: number;
 }
 export interface Preferences {
+  showSubscription: boolean;
   expandedSize: WindowSize | null;
   compact: boolean;
   autoRefresh: boolean;
@@ -53,6 +54,7 @@ export interface Bootstrap {
   demo?: boolean;
 }
 export const defaults: Preferences = {
+  showSubscription: false,
   expandedSize: null,
   compact: true,
   autoRefresh: true,

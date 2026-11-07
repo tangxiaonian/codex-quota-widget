@@ -101,6 +101,19 @@ export function SettingsView({
       </div>
       <div className="divider" />
       <div className="setting-row">
+        <span>显示订阅有效期</span>
+        <Switch
+          label="显示订阅有效期"
+          checked={preferences.showSubscription}
+          onChange={() =>
+            void update({ showSubscription: !preferences.showSubscription })
+          }
+        />
+      </div>
+      <p className="setting-help">
+        从本机 Codex 登录令牌读取当前账号的订阅日期。缺少日期时隐藏。
+      </p>
+      <div className="setting-row">
         <span>始终置顶</span>
         <Switch
           label="始终置顶"

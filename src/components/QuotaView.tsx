@@ -3,11 +3,13 @@ import { MiniQuota } from "./MiniQuota";
 import type { Snapshot } from "../model";
 /** Share account and quota data between the compact bars and expanded gauges. */
 export function QuotaView({
+  subscription,
   compact,
   snapshot,
   busy,
   now,
 }: {
+  subscription: string | null;
   compact: boolean;
   snapshot: Snapshot | null;
   busy: boolean;
@@ -23,6 +25,7 @@ export function QuotaView({
               {snapshot?.account.email ??
                 (busy ? "正在读取账号…" : "等待账号信息")}
             </span>
+            {subscription && <small>{subscription}</small>}
             {snapshot?.account.workspaceName && (
               <small>{snapshot.account.workspaceName}</small>
             )}

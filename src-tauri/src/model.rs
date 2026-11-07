@@ -58,6 +58,8 @@ pub struct Preferences {
     /// Logical points; absent in older saved preferences.
     #[serde(default)]
     pub expanded_size: Option<WindowSize>,
+    #[serde(default)]
+    pub show_subscription: bool,
     pub compact: bool,
     pub auto_refresh: bool,
     pub refresh_minutes: u32,
@@ -77,6 +79,7 @@ impl Default for Preferences {
     fn default() -> Self {
         Self {
             expanded_size: None,
+            show_subscription: false,
             compact: true,
             auto_refresh: true,
             refresh_minutes: 5,
@@ -114,6 +117,13 @@ pub fn now() -> i64 {
         .unwrap_or_default()
         .as_secs() as i64
 }
+/// Stable identity shared by the RPC snapshot and local subscription lookup.
+pub fn account_key(id: &str, email: &str) -> String {
+    format!(
+        "{:x}",
+        Sha256::digest(format!("{}\0{}", id, email).as_bytes())
+    )
+}
 /// Extract non-secret view data; unknown fields and missing windows remain unknown.
 pub fn normalize(account: &Value, usage: &Value, now: i64) -> Result<Snapshot, String> {
     let a = &account["account"];
@@ -129,10 +139,7 @@ pub fn normalize(account: &Value, usage: &Value, now: i64) -> Result<Snapshot, S
         .ok_or("当前 Codex 未返回账户标识，请升级后重试")?;
     let email = string(a, "email");
     // The backend account ID scopes the workspace; email adds the user within that workspace.
-    let key = format!(
-        "{:x}",
-        Sha256::digest(format!("{}\0{}", id, email.as_deref().unwrap_or("")).as_bytes())
-    );
+    let key = account_key(id, email.as_deref().unwrap_or(""));
     let bucket = usage
         .get("rateLimitsByLimitId")
         .and_then(|v| v.get("codex"))

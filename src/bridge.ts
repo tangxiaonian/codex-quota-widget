@@ -36,6 +36,16 @@ export async function refresh(): Promise<Snapshot> {
     ? { ...sample, fetchedAt: Math.floor(Date.now() / 1000) }
     : invoke<Snapshot>("refresh_snapshot");
 }
+/** Demo dates are relative to the fixture; the native command exposes only the account's date. */
+export async function subscriptionUntil(
+  accountKey: string,
+): Promise<number | null> {
+  if (demo)
+    return accountKey === sample.account.key
+      ? sample.fetchedAt + 23 * 86400
+      : null;
+  return invoke("subscription_active_until", { accountKey });
+}
 /** Production consumption is reachable solely through explicit confirmation. Demo stays local. */
 export async function consume(
   accountKey: string,

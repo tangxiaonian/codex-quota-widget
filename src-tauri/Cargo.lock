@@ -502,7 +502,9 @@ dependencies = [
 name = "codex-quota-widget"
 version = "0.1.0"
 dependencies = [
+ "base64 0.21.7",
  "cc",
+ "chrono",
  "rusqlite",
  "serde",
  "serde_json",
@@ -511,6 +513,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-autostart",
  "tauri-plugin-single-instance",
+ "toml 1.2.0+spec-1.1.0",
  "uuid",
 ]
 

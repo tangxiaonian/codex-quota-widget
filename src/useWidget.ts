@@ -28,7 +28,6 @@ export function useWidget() {
     prefsRef = useRef(preferences),
     lifeRef = useRef(lifecycle),
     lastReset = useRef("");
-  prefsRef.current = preferences;
   lifeRef.current = lifecycle;
   /** Merge simultaneous triggers into one in-flight read. */
   const refresh = useCallback(async () => {
@@ -56,12 +55,20 @@ export function useWidget() {
     const previous = prefsRef.current;
     const next = { ...previous, ...patch };
     prefsRef.current = next;
-    setPreferences(next);
+    // The native lookup verifies persisted opt-in, so publish enablement only after the save.
+    const enabling = patch.showSubscription === true;
+    if (!enabling) setPreferences(next);
     try {
       await bridge.save(next);
+      if (enabling) setPreferences(prefsRef.current);
       if (next.alwaysOnTop !== previous.alwaysOnTop)
         await bridge.pin(next.alwaysOnTop);
     } catch (e) {
+      if (enabling)
+        prefsRef.current = {
+          ...prefsRef.current,
+          showSubscription: previous.showSubscription,
+        };
       setError(String(e));
     }
   }, []);

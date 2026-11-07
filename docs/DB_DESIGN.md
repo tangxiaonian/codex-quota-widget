@@ -68,3 +68,5 @@ quota_window 和 reset_credit 的 account_key 外键关联 account_cache，ON DE
 已测试：首次创建、重开、偏好持久化、替换账号后仅保留新快照及窗口。尚无 v2 迁移；新增版本时须先实现迁移，不能悄悄清空设置。
 
 本次只扩展设置 JSON 可选字段，不改表结构，schema 仍为 v1。Rust 测试覆盖旧 JSON 兼容与展开尺寸重开后保持。
+
+设置 JSON 新增可选 `showSubscription`，缺失时为 false。订阅有效期仅保存在显示会话内，SQLite 不存储日期和令牌。

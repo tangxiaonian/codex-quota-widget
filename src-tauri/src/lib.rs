@@ -1,7 +1,9 @@
+mod credential_store;
 mod model;
 mod provider;
 mod rpc;
 mod storage;
+mod subscription;
 mod window;
 use model::{Preferences, Snapshot};
 use serde::Serialize;
@@ -101,6 +103,26 @@ fn save_preferences(
         }
     }
     Ok(())
+}
+#[tauri::command]
+/// Return just the locally matched date when the user has enabled subscription display.
+async fn subscription_active_until(
+    app: tauri::AppHandle,
+    account_key: String,
+) -> Result<Option<i64>, String> {
+    let enabled = app
+        .state::<State>()
+        .storage
+        .lock()
+        .map_err(|_| "本地存储不可用")?
+        .preferences()?
+        .show_subscription;
+    if !enabled {
+        return Ok(None);
+    }
+    tauri::async_runtime::spawn_blocking(move || subscription::active_until(&account_key))
+        .await
+        .map_err(|_| "读取订阅有效期失败".into())
 }
 #[tauri::command]
 /// Fetch live read-only data off the event loop, then atomically cache the safe view model.
@@ -220,6 +242,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             bootstrap,
             save_preferences,
+            subscription_active_until,
             refresh_snapshot,
             consume_credit,
             window::arm_top_hide,

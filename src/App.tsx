@@ -3,6 +3,7 @@ import { Clock3, RefreshCw, X } from "lucide-react";
 import { remaining } from "./model";
 import { useWidget } from "./useWidget";
 import { useWindowBehavior } from "./hooks/useWindowBehavior";
+import { useSubscription } from "./hooks/useSubscription";
 import { useRedemption } from "./hooks/useRedemption";
 import { CardHeader } from "./components/CardHeader";
 import { QuotaView } from "./components/QuotaView";
@@ -14,6 +15,11 @@ import { ResizeEdges } from "./components/ResizeEdges";
 export default function App() {
   const w = useWidget();
   const { snapshot, preferences, now } = w;
+  const subscription = useSubscription(
+    preferences.showSubscription,
+    snapshot,
+    now,
+  );
   const redemption = useRedemption(w);
   const { selection, redeeming } = redemption;
   const compact = preferences.compact && !w.settings && !selection;
@@ -55,6 +61,7 @@ export default function App() {
     >
       {!compact && <ResizeEdges onError={w.setError} />}
       <CardHeader
+        subscription={subscription}
         compact={compact}
         snapshot={snapshot}
         preferences={preferences}
@@ -90,6 +97,7 @@ export default function App() {
       ) : (
         <>
           <QuotaView
+            subscription={subscription?.full ?? null}
             compact={compact}
             snapshot={snapshot}
             busy={w.busy}

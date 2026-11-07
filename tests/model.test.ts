@@ -56,3 +56,18 @@ test("english credit titles localize, unknown ones pass through", () => {
   );
   assert.equal(localizedTitle("Mystery bonus"), "Mystery bonus");
 });
+
+import { subscriptionText } from "../src/subscription.ts";
+test("subscription date handles missing and elapsed periods without claiming cancellation", () => {
+  assert.equal(subscriptionText(null, 10), null);
+  assert.match(
+    subscriptionText(2100000000, 2100000000 - 23 * 86400)!.full,
+    /订阅有效至 .*剩余 23 天/,
+  );
+  const end = new Date(2027, 0, 1, 12).getTime() / 1000;
+  assert.equal(
+    subscriptionText(end, end - 3600)?.compact,
+    "有效至 2027/01/01 · 剩余不足 1 天",
+  );
+  assert.match(subscriptionText(end, end + 1)!.compact, /该日期已过/);
+});

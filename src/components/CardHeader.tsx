@@ -1,8 +1,11 @@
 import { Plus, Minus, RefreshCw, Settings2, X, Pin } from "lucide-react";
 import * as bridge from "../bridge";
 import type { Preferences, Snapshot } from "../model";
+import type { SubscriptionText } from "../subscription";
+
 /** Keep drag gestures and navigation controls together, independent from account operations. */
 export function CardHeader({
+  subscription,
   compact,
   snapshot,
   preferences,
@@ -15,6 +18,7 @@ export function CardHeader({
   onBack,
   onToggle,
 }: {
+  subscription: SubscriptionText | null;
   compact: boolean;
   snapshot: Snapshot | null;
   preferences: Preferences;
@@ -35,7 +39,6 @@ export function CardHeader({
       }}
     >
       {compact ? (
-        /* Mini bar identity row: mark, account and plan share one line. */
         <>
           <span className="brand-mark mini-mark">C</span>
           <div className="mini-ident">
@@ -43,8 +46,15 @@ export function CardHeader({
               {snapshot?.account.email ??
                 (busy ? "正在读取账号…" : "等待账号信息")}
             </span>
+            {subscription && (
+              <small className="mini-subscription" title={subscription.full}>
+                {subscription.compact}
+              </small>
+            )}
           </div>
-          <span className="badge">{snapshot?.account.planType ?? "Codex"}</span>
+          <span className="badge">
+            {snapshot?.account.planType ?? "Codex"}
+          </span>
         </>
       ) : (
         <div className="brand">
