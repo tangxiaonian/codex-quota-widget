@@ -74,5 +74,5 @@ test("subscription date handles missing and elapsed periods without claiming can
     "有效至 2027/01/01 · 剩余 1 天",
   );
   assert.match(subscriptionText(end, end - 59)!.full, /剩余不足 1 分钟/);
-  assert.match(subscriptionText(end, end + 1)!.compact, /该日期已过/);
+  assert.match(subscriptionText(end, end + 1)!.compact, /订阅日期待同步/);
 });

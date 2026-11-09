@@ -111,7 +111,7 @@ export function SettingsView({
         />
       </div>
       <p className="setting-help">
-        从本机 Codex 登录令牌读取当前账号的订阅日期。缺少日期时隐藏。
+        优先读取本地日期。上期结束后，会使用当前账号向 ChatGPT 查询新日期，必要时由 Codex 刷新登录信息。
       </p>
       <div className="setting-row">
         <span>始终置顶</span>

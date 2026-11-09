@@ -34,13 +34,16 @@ export function subscriptionText(
   const date = new Date(until * 1000);
   if (Number.isNaN(date.getTime())) return null;
   const seconds = until - now;
-  const withinDay = seconds > 0 && seconds < 86400;
-  const remaining =
-    seconds <= 0
-      ? "该日期已过"
-      : withinDay
-        ? remainingWithinDay(seconds)
-        : `剩余 ${Math.ceil(seconds / 86400)} 天`;
+  if (seconds <= 0) {
+    return {
+      full: `上期有效至 ${fullDate.format(date)} · 新日期待同步`,
+      compact: "订阅日期待同步",
+    };
+  }
+  const withinDay = seconds < 86400;
+  const remaining = withinDay
+    ? remainingWithinDay(seconds)
+    : `剩余 ${Math.ceil(seconds / 86400)} 天`;
   return {
     full: `订阅有效至 ${fullDate.format(date)} · ${remaining}`,
     compact: `有效至 ${(withinDay ? shortDateTime : shortDate).format(date)} · ${remaining}`,
