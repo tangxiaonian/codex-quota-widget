@@ -64,10 +64,15 @@ test("subscription date handles missing and elapsed periods without claiming can
     subscriptionText(2100000000, 2100000000 - 23 * 86400)!.full,
     /订阅有效至 .*剩余 23 天/,
   );
-  const end = new Date(2027, 0, 1, 12).getTime() / 1000;
+  const end = new Date(2027, 0, 1, 0, 5).getTime() / 1000;
   assert.equal(
-    subscriptionText(end, end - 3600)?.compact,
-    "有效至 2027/01/01 · 剩余不足 1 天",
+    subscriptionText(end, end - 3660)?.compact,
+    "有效至 01/01 00:05 · 剩余 1 小时 1 分",
   );
+  assert.equal(
+    subscriptionText(end, end - 86400)?.compact,
+    "有效至 2027/01/01 · 剩余 1 天",
+  );
+  assert.match(subscriptionText(end, end - 59)!.full, /剩余不足 1 分钟/);
   assert.match(subscriptionText(end, end + 1)!.compact, /该日期已过/);
 });

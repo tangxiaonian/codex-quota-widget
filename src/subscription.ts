@@ -12,6 +12,14 @@ const shortDate = new Intl.DateTimeFormat("zh-CN", {
   day: "2-digit",
 });
 
+const shortDateTime = new Intl.DateTimeFormat("zh-CN", {
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
 export interface SubscriptionText {
   full: string;
   compact: string;
@@ -25,15 +33,28 @@ export function subscriptionText(
   if (!until || !Number.isFinite(until)) return null;
   const date = new Date(until * 1000);
   if (Number.isNaN(date.getTime())) return null;
-  const days = Math.ceil((until - now) / 86400);
+  const seconds = until - now;
+  const withinDay = seconds > 0 && seconds < 86400;
   const remaining =
-    until <= now
+    seconds <= 0
       ? "该日期已过"
-      : until - now < 86400
-        ? "剩余不足 1 天"
-        : `剩余 ${days} 天`;
+      : withinDay
+        ? remainingWithinDay(seconds)
+        : `剩余 ${Math.ceil(seconds / 86400)} 天`;
   return {
     full: `订阅有效至 ${fullDate.format(date)} · ${remaining}`,
-    compact: `有效至 ${shortDate.format(date)} · ${remaining}`,
+    compact: `有效至 ${(withinDay ? shortDateTime : shortDate).format(date)} · ${remaining}`,
   };
+}
+
+/** Show whole hours and minutes during the final day of the subscription. */
+function remainingWithinDay(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  if (!minutes) return "剩余不足 1 分钟";
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return (
+    "剩余 " +
+    [hours && `${hours} 小时`, rest && `${rest} 分`].filter(Boolean).join(" ")
+  );
 }
