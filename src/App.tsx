@@ -55,6 +55,11 @@ export default function App() {
         minute: "2-digit",
       })
     : "尚未更新";
+  const statusText =
+    w.error ??
+    (!w.fresh && snapshot && !w.busy
+      ? `上次数据 ${lastUpdate}，等待刷新`
+      : null);
   return (
     <main
       className={`card ${compact ? "compact" : "expanded"} ${w.lifecycle.reduceTransparency ? "opaque" : ""} ${lowQuota ? "quota-alert" : ""}`}
@@ -116,10 +121,10 @@ export default function App() {
           )}
         </>
       )}
-      {(w.error || (!w.fresh && !!snapshot && !w.busy)) && (
+      {statusText && (
         <div className="status-banner" role="status">
           <Clock3 size={13} />
-          <span>{w.error ?? `上次数据 ${lastUpdate}，等待刷新`}</span>
+          <span title={statusText}>{statusText}</span>
           {!selection && !w.settings && (
             <button
               aria-label="重试刷新"
@@ -131,9 +136,9 @@ export default function App() {
           )}
         </div>
       )}
-      {w.notice && (
+      {w.notice && (!compact || !statusText) && (
         <div className="notice" role="status">
-          <span>{w.notice}</span>
+          <span title={w.notice}>{w.notice}</span>
           <button aria-label="关闭提示" onClick={() => w.setNotice(null)}>
             <X size={13} />
           </button>
