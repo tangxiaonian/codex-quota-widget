@@ -1,15 +1,6 @@
 #import <Foundation/Foundation.h>
 
-// The bearer is scoped to chatgpt.com. Never follow a login redirect or forward it to another host.
-@interface CQSubscriptionRequest : NSObject <NSURLSessionTaskDelegate>
-@end
-@implementation CQSubscriptionRequest
-- (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task
- willPerformHTTPRedirection:(NSHTTPURLResponse *)response newRequest:(NSURLRequest *)request
- completionHandler:(void (^)(NSURLRequest *))completion {
-    completion(nil);
-}
-@end
+#import "quota_http.h"
 
 /// Fetch only the selected subscription endpoint, using macOS proxy and trust settings.
 char *cq_subscription_json(const char *token, const char *workspace, bool detail) {
@@ -25,10 +16,8 @@ char *cq_subscription_json(const char *token, const char *workspace, bool detail
         [request setValue:@"https://chatgpt.com/" forHTTPHeaderField:@"Referer"];
         [request setValue:path forHTTPHeaderField:@"x-openai-target-path"];
         [request setValue:path forHTTPHeaderField:@"x-openai-target-route"];
-        NSURLSessionConfiguration *config = NSURLSessionConfiguration.ephemeralSessionConfiguration;
-        config.timeoutIntervalForRequest = 12;
-        config.timeoutIntervalForResource = 18;
-        NSURLSession *session = [NSURLSession sessionWithConfiguration:config delegate:[CQSubscriptionRequest new] delegateQueue:nil];
+        request.timeoutInterval = 12;
+        NSURLSession *session = cq_quota_http_session();
         dispatch_semaphore_t done = dispatch_semaphore_create(0);
         __block char *result = NULL;
         [[session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
@@ -39,7 +28,6 @@ char *cq_subscription_json(const char *token, const char *workspace, bool detail
             dispatch_semaphore_signal(done);
         }] resume];
         dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
-        [session finishTasksAndInvalidate];
         return result;
     }
 }

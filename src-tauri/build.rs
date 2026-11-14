@@ -4,6 +4,7 @@ fn main() {
             .file("native/workspace.m")
             .file("native/top_hide.m")
             .file("native/subscription_http.m")
+            .file("native/quota_http.m")
             .flag("-fobjc-arc")
             .compile("workspace");
         println!("cargo:rustc-link-lib=framework=AppKit");
@@ -12,6 +13,8 @@ fn main() {
         println!("cargo:rerun-if-changed=native/top_hide.m");
         println!("cargo:rerun-if-changed=native/window.h");
         println!("cargo:rerun-if-changed=native/subscription_http.m");
+        println!("cargo:rerun-if-changed=native/quota_http.m");
+        println!("cargo:rerun-if-changed=native/quota_http.h");
     }
     tauri_build::build()
 }
