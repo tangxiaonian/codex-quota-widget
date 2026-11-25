@@ -23,11 +23,13 @@ Tauri 2、Rust、React 19、TypeScript 5.8、Vite 7、SQLite/rusqlite；少量 O
 ```text
 src/App.tsx          # 页面组合与导航
 src/components/      # 头部、额度、卡片列表、设置、确认等视图
-src/hooks/           # 用卡流程与窗口事件绑定
+src/hooks/           # 用卡、来源协调、独立刷新与窗口事件绑定
 src/window/          # 窗口控制、屏幕几何和 Tauri 窗口适配
 src/                 # 模型、账户 IPC、刷新调度
 src-tauri/src/       # Rust 命令、RPC、数据解析、存储
-src-tauri/native/    # macOS 事件桥接
+src-tauri/src/workbuddy/ # WorkBuddy 当前账号只读会话、解析与调度
+src-tauri/src/antigravity/ # Antigravity 本机 Language Server 与 agy CLI 只读采集
+src-tauri/native/    # macOS 事件桥接与固定来源 HTTPS 查询
 src-tauri/icons/     # 本项目图标
 src-tauri/capabilities/ # 最小窗口与自启动权限
 scripts/             # 本地工具链与构建入口

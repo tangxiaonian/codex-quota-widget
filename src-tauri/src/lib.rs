@@ -1,3 +1,5 @@
+#[cfg(target_os = "macos")]
+mod antigravity;
 mod credential_store;
 mod model;
 mod provider;
@@ -5,6 +7,7 @@ mod rpc;
 mod storage;
 mod subscription;
 mod window;
+mod workbuddy;
 use model::{Preferences, Snapshot};
 use serde::Serialize;
 use std::{
@@ -30,6 +33,8 @@ struct State {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Lifecycle {
+    workbuddy_running: bool,
+    antigravity_running: bool,
     running: bool,
     sleeping: bool,
     reduce_transparency: bool,
@@ -45,6 +50,8 @@ struct Bootstrap {
 #[cfg(target_os = "macos")]
 extern "C" {
     fn cq_codex_running() -> bool;
+    fn cq_workbuddy_running() -> bool;
+    fn cq_antigravity_running() -> bool;
     fn cq_observe(callback: extern "C" fn(bool, bool, bool));
 }
 /// Relay native events to the UI without polling the process table.
@@ -55,6 +62,8 @@ extern "C" fn on_workspace(running: bool, sleeping: bool, reduce: bool) {
         let _ = app.emit(
             "codex-state",
             Lifecycle {
+                workbuddy_running: unsafe { cq_workbuddy_running() },
+                antigravity_running: unsafe { cq_antigravity_running() },
                 running,
                 sleeping,
                 reduce_transparency: reduce,
@@ -69,6 +78,8 @@ fn lifecycle() -> Lifecycle {
     #[cfg(not(target_os = "macos"))]
     let running = true;
     Lifecycle {
+        workbuddy_running: unsafe { cq_workbuddy_running() },
+        antigravity_running: unsafe { cq_antigravity_running() },
         running,
         sleeping: SLEEPING.load(Ordering::Relaxed),
         reduce_transparency: REDUCED.load(Ordering::Relaxed),
@@ -123,6 +134,25 @@ async fn subscription_active_until(
     tauri::async_runtime::spawn_blocking(move || subscription::active_until(&account_key))
         .await
         .map_err(|_| "读取订阅有效期失败".into())
+}
+#[tauri::command]
+/// Query the current WorkBuddy identity on a worker thread, independent of Codex refresh.
+async fn refresh_workbuddy(
+    expected_account_key: Option<String>,
+) -> Result<workbuddy::Snapshot, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        workbuddy::refresh(expected_account_key.as_deref())
+    })
+    .await
+    .map_err(|_| "WorkBuddy 查询任务异常".to_owned())?
+}
+#[cfg(target_os = "macos")]
+#[tauri::command]
+/// Query local Antigravity language server or `agy` CLI off the UI event loop.
+async fn refresh_antigravity() -> Result<antigravity::Snapshot, String> {
+    tauri::async_runtime::spawn_blocking(antigravity::refresh)
+        .await
+        .map_err(|_| "Antigravity 查询任务异常".to_owned())?
 }
 #[tauri::command]
 /// Fetch live read-only data off the event loop, then atomically cache the safe view model.
@@ -244,6 +274,9 @@ pub fn run() {
             save_preferences,
             subscription_active_until,
             refresh_snapshot,
+            refresh_workbuddy,
+            #[cfg(target_os = "macos")]
+            refresh_antigravity,
             consume_credit,
             window::arm_top_hide,
             window::disarm_top_hide

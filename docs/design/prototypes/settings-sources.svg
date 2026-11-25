@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 470" width="680" role="img">
+<title>设置页来源管理原型</title>
+<desc>来源级与应用级配置分层；WorkBuddy 连接引导、未连接/异常态、档位显示</desc>
+<defs>
+<marker id="arrow3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+
+<text x="40" y="40" font-family="system-ui" font-size="15" font-weight="500" fill="#16313f">来源管理</text>
+
+<!-- 来源卡1 Codex -->
+<rect x="40" y="56" width="600" height="86" rx="12" fill="#ffffff" stroke="#e3e8ec" stroke-width="0.5"/>
+<rect x="56" y="74" width="30" height="30" rx="7" fill="#85B7EB"/>
+<text x="71" y="94" font-family="system-ui" font-size="14" font-weight="500" fill="#042C53" text-anchor="middle">C</text>
+<text x="98" y="88" font-family="system-ui" font-size="14" font-weight="500" fill="#16313f">Codex</text>
+<text x="98" y="106" font-family="system-ui" font-size="12" fill="#4d6570">已连接 · 本地 app-server 子进程</text>
+<rect x="540" y="80" width="80" height="28" rx="8" fill="#EAF3DE" stroke="#639922" stroke-width="0.5"/>
+<text x="580" y="98" font-family="system-ui" font-size="12" fill="#27500A" text-anchor="middle">启用中</text>
+
+<!-- 来源卡2 WorkBuddy 未连接 -->
+<rect x="40" y="156" width="600" height="108" rx="12" fill="#ffffff" stroke="#e3e8ec" stroke-width="0.5"/>
+<rect x="56" y="174" width="30" height="30" rx="7" fill="#AFA9EC"/>
+<text x="71" y="194" font-family="system-ui" font-size="14" font-weight="500" fill="#26215C" text-anchor="middle">W</text>
+<text x="98" y="188" font-family="system-ui" font-size="14" font-weight="500" fill="#16313f">WorkBuddy</text>
+<text x="98" y="206" font-family="system-ui" font-size="12" fill="#4d6570">积分制 · 本地客户端 / 云端 API</text>
+<rect x="540" y="174" width="80" height="28" rx="8" fill="#f1f3f5" stroke="#e3e8ec" stroke-width="0.5"/>
+<text x="580" y="192" font-family="system-ui" font-size="12" fill="#4d6570" text-anchor="middle">未连接</text>
+<!-- 引导 -->
+<rect x="56" y="222" width="320" height="30" rx="8" fill="#E6F1FB" stroke="#378ADD" stroke-width="0.5"/>
+<text x="70" y="241" font-family="system-ui" font-size="12" fill="#0C447C">点击连接 · 需授权本地客户端或登录态</text>
+
+<!-- 应用级设置 -->
+<rect x="40" y="280" width="600" height="160" rx="12" fill="#fbfcfd" stroke="#eef2f4" stroke-width="0.5"/>
+<text x="60" y="306" font-family="system-ui" font-size="13" font-weight="500" fill="#16313f">应用级设置（对所有来源生效）</text>
+
+<text x="60" y="338" font-family="system-ui" font-size="13" fill="#16313f">刷新间隔</text>
+<rect x="500" y="324" width="120" height="26" rx="6" fill="#ffffff" stroke="#e3e8ec" stroke-width="0.5"/>
+<text x="514" y="341" font-family="system-ui" font-size="12" fill="#4d6570">每分钟</text>
+
+<text x="60" y="372" font-family="system-ui" font-size="13" fill="#16313f">菜单栏图标</text>
+<rect x="500" y="358" width="120" height="26" rx="6" fill="#ffffff" stroke="#e3e8ec" stroke-width="0.5"/>
+<text x="514" y="375" font-family="system-ui" font-size="12" fill="#4d6570">显示</text>
+
+<text x="60" y="406" font-family="system-ui" font-size="13" fill="#16313f">贴顶停靠自动隐藏</text>
+<rect x="500" y="392" width="120" height="26" rx="6" fill="#ffffff" stroke="#e3e8ec" stroke-width="0.5"/>
+<text x="514" y="409" font-family="system-ui" font-size="12" fill="#4d6570">开启</text>
+
+<text x="40" y="462" font-family="system-ui" font-size="11" fill="#4d6570">WorkBuddy 无需 app-server 子进程，连接链路与 Codex 不同；连接失败显示异常态而非空壳</text>
+</svg>

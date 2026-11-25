@@ -6,7 +6,12 @@ import {
   type Display,
   type WindowMode,
 } from "../src/window/geometry.ts";
-import { defaults, type Preferences, type WindowSize } from "../src/model.ts";
+import {
+  compactHeight,
+  defaults,
+  type Preferences,
+  type WindowSize,
+} from "../src/model.ts";
 
 /** Model the OS boundary while exercising the same controller used by React. */
 function harness(expanded: WindowSize | null = null) {
@@ -78,6 +83,22 @@ test("data refresh does not resize, expanded user size survives views and restar
   });
   await restarted.owner.stop();
   assert.equal(restarted.parked(), false);
+});
+
+test("three-source overview resizes in place and returns to the original mini height", async () => {
+  const { owner, applications } = harness();
+  const prefs = { ...defaults, antigravityEnabled: true };
+  await owner.enter("compact", compactHeight(defaults));
+  await owner.enter("compact", compactHeight(prefs));
+  await owner.enter("compact", compactHeight(prefs));
+  await owner.enter(
+    "compact",
+    compactHeight({ ...prefs, compactView: "current" }),
+  );
+  assert.deepEqual(
+    applications.map(({ size }) => size.height),
+    [104, 128, 104],
+  );
 });
 
 const primary: Display = {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as bridge from "./bridge";
 import {
   defaults,
+  sourceRunning,
   type Preferences,
   type Snapshot,
   type Lifecycle,
@@ -28,10 +29,17 @@ export function useWidget() {
     prefsRef = useRef(preferences),
     lifeRef = useRef(lifecycle),
     lastReset = useRef("");
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   lifeRef.current = lifecycle;
   /** Merge simultaneous triggers into one in-flight read. */
   const refresh = useCallback(async () => {
-    if (pending.current || lifeRef.current.sleeping) return;
+    if (
+      !prefsRef.current.codexEnabled ||
+      pending.current ||
+      lifeRef.current.sleeping
+    )
+      return;
     pending.current = true;
     setBusy(true);
     setFresh(false);
@@ -90,15 +98,19 @@ export function useWidget() {
         await bridge.pin(b.preferences.alwaysOnTop);
         setReady(true);
         await bridge.show(
-          !b.preferences.followCodex || b.lifecycle.running || !!b.demo,
+          !b.preferences.followCodex ||
+            sourceRunning(b.lifecycle, b.preferences) ||
+            !!b.demo,
         );
         cleanup.push(
           await bridge.onLifecycle((state) => {
             const previous = lifeRef.current;
             lifeRef.current = state;
             setLifecycle(state);
-            if (prefsRef.current.followCodex)
-              void bridge.show(state.running && !state.sleeping);
+            if (prefsRef.current.followCodex && !settingsRef.current)
+              void bridge.show(
+                sourceRunning(state, prefsRef.current) && !state.sleeping,
+              );
             if (
               state.running &&
               !state.sleeping &&
@@ -128,11 +140,31 @@ export function useWidget() {
     };
   }, [refresh, update]);
   useEffect(() => {
+    if (!ready) return;
+    if (preferences.codexEnabled) void refresh();
+  }, [ready, preferences.codexEnabled, refresh]);
+  useEffect(() => {
+    if (!ready) return;
+    if (preferences.followCodex && !settings)
+      void bridge.show(
+        sourceRunning(lifeRef.current, preferences) &&
+          !lifeRef.current.sleeping,
+      );
+  }, [
+    ready,
+    preferences.codexEnabled,
+    preferences.workbuddyEnabled,
+    preferences.antigravityEnabled,
+    preferences.followCodex,
+    settings,
+    refresh,
+  ]);
+  useEffect(() => {
     if (
       !ready ||
       !preferences.autoRefresh ||
       lifecycle.sleeping ||
-      (!lifecycle.running && preferences.followCodex)
+      (!sourceRunning(lifecycle, preferences) && preferences.followCodex)
     )
       return;
     const timer = setInterval(
@@ -146,6 +178,11 @@ export function useWidget() {
     preferences.refreshMinutes,
     preferences.followCodex,
     lifecycle.running,
+    lifecycle.workbuddyRunning,
+    lifecycle.antigravityRunning,
+    preferences.codexEnabled,
+    preferences.workbuddyEnabled,
+    preferences.antigravityEnabled,
     lifecycle.sleeping,
     refresh,
   ]);
@@ -163,7 +200,7 @@ export function useWidget() {
       !fresh ||
       !preferences.autoRefresh ||
       lifecycle.sleeping ||
-      (!lifecycle.running && preferences.followCodex)
+      (!sourceRunning(lifecycle, preferences) && preferences.followCodex)
     )
       return;
     const due = snapshot.windows
@@ -183,6 +220,11 @@ export function useWidget() {
     preferences.autoRefresh,
     preferences.followCodex,
     lifecycle.running,
+    lifecycle.workbuddyRunning,
+    lifecycle.antigravityRunning,
+    preferences.codexEnabled,
+    preferences.workbuddyEnabled,
+    preferences.antigravityEnabled,
     lifecycle.sleeping,
     refresh,
   ]);

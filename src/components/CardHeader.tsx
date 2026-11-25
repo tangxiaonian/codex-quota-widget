@@ -1,10 +1,13 @@
+import { MiniViewPicker } from "./MiniViewPicker";
 import { Plus, Minus, RefreshCw, Settings2, X, Pin } from "lucide-react";
 import * as bridge from "../bridge";
-import type { Preferences, Snapshot } from "../model";
+import type { Preferences, Snapshot, SourceId } from "../model";
 import type { SubscriptionText } from "../subscription";
 
 /** Keep drag gestures and navigation controls together, independent from account operations. */
 export function CardHeader({
+  identity,
+  onMiniView,
   subscription,
   compact,
   snapshot,
@@ -18,6 +21,8 @@ export function CardHeader({
   onBack,
   onToggle,
 }: {
+  identity?: { name: string; plan: string | null };
+  onMiniView: (value: "all" | SourceId) => void;
   subscription: SubscriptionText | null;
   compact: boolean;
   snapshot: Snapshot | null;
@@ -31,58 +36,79 @@ export function CardHeader({
   onBack: () => void;
   onToggle: () => void;
 }) {
+  const plan = (identity ? identity.plan : snapshot?.account.planType) ?? null;
   const resizeTitle = preferences.compact ? "展开卡片" : "收起卡片";
   return (
     <header
       onMouseDown={(e) => {
-        if (!(e.target as HTMLElement).closest("button,input")) bridge.drag();
+        if (!(e.target as HTMLElement).closest("button,input,select"))
+          bridge.drag();
       }}
     >
       {compact ? (
         <>
-          <span className="brand-mark mini-mark">C</span>
+          <MiniViewPicker preferences={preferences} onChange={onMiniView} />
           <div className="mini-ident">
-            <span className="email" title={snapshot?.account.email ?? ""}>
-              {snapshot?.account.email ??
-                (busy ? "正在读取账号…" : "等待账号信息")}
-            </span>
-            {subscription && (
-              <small className="mini-subscription" title={subscription.full}>
-                {subscription.compact}
-              </small>
+            {preferences.compactView === "current" && (
+              <>
+                <div className="mini-email-line">
+                  <span
+                    className="email"
+                    title={identity?.name ?? snapshot?.account.email ?? ""}
+                  >
+                    {identity?.name ??
+                      snapshot?.account.email ??
+                      (busy ? "读取中…" : "等待账号")}
+                  </span>
+                  {plan && (
+                    <span className="badge" title={plan}>
+                      {plan}
+                    </span>
+                  )}
+                </div>
+                {subscription && (
+                  <small
+                    className="mini-subscription"
+                    title={subscription.full}
+                  >
+                    {subscription.compact}
+                  </small>
+                )}
+              </>
             )}
           </div>
-          <span className="badge">
-            {snapshot?.account.planType ?? "Codex"}
-          </span>
         </>
       ) : (
         <div className="brand">
-          <span className="brand-mark">C</span>
-          <span>Codex</span>
+          <span className="brand-mark">Q</span>
+          <span>额度卡片</span>
           {preferences.alwaysOnTop && <Pin size={12} className="pin-mark" />}
         </div>
       )}
       <div className="toolbar">
-        {!compact && !settings && !selection && (
+        {!settings && !selection && (
           <>
-            <button
-              className="icon-button"
-              aria-label="刷新额度"
-              title="刷新额度"
-              onClick={() => void onRefresh()}
-              disabled={busy}
-            >
-              <RefreshCw size={17} className={busy ? "loading" : ""} />
-            </button>
-            <button
-              className="icon-button"
-              aria-label="偏好设置"
-              title="偏好设置"
-              onClick={() => onSettings()}
-            >
-              <Settings2 size={17} />
-            </button>
+            {(!compact || preferences.compactView === "all") && (
+              <button
+                className="icon-button"
+                aria-label="刷新额度"
+                title="刷新额度"
+                onClick={() => void onRefresh()}
+                disabled={busy}
+              >
+                <RefreshCw size={17} className={busy ? "loading" : ""} />
+              </button>
+            )}
+            {!compact && (
+              <button
+                className="icon-button"
+                aria-label="偏好设置"
+                title="偏好设置"
+                onClick={() => onSettings()}
+              >
+                <Settings2 size={17} />
+              </button>
+            )}
           </>
         )}
         {settings || selection ? (

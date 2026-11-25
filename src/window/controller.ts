@@ -23,8 +23,14 @@ export class WindowController {
     };
   }
   /** Cancel parking before entering any view, including settings opened while the mini bar is invisible. */
-  async enter(mode: WindowMode) {
-    if (this.mode === mode) return;
+  async enter(mode: WindowMode, miniHeight = 104) {
+    const resizeMini = mode === "compact" && this.sizes.compact.height !== miniHeight;
+    if (this.mode === mode && !resizeMini) {
+      return;
+    }
+    if (resizeMini) {
+      this.sizes.compact = { width: 360, height: miniHeight };
+    }
     this.transitioning = true;
     this.mode = mode;
     try {

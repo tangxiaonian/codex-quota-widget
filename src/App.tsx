@@ -1,3 +1,5 @@
+import { useSources } from "./hooks/useSources";
+import { SourceContent } from "./components/SourceContent";
 import { useEffect } from "react";
 import { Clock3, RefreshCw, X } from "lucide-react";
 import { remaining } from "./model";
@@ -6,8 +8,6 @@ import { useWindowBehavior } from "./hooks/useWindowBehavior";
 import { useSubscription } from "./hooks/useSubscription";
 import { useRedemption } from "./hooks/useRedemption";
 import { CardHeader } from "./components/CardHeader";
-import { QuotaView } from "./components/QuotaView";
-import { CreditList } from "./components/CreditList";
 import { SettingsView } from "./components/SettingsView";
 import { CreditConfirmation } from "./components/CreditConfirmation";
 import { ResizeEdges } from "./components/ResizeEdges";
@@ -15,8 +15,20 @@ import { ResizeEdges } from "./components/ResizeEdges";
 export default function App() {
   const w = useWidget();
   const { snapshot, preferences, now } = w;
+  const sources = useSources(w);
+  const {
+    workbuddy: wb,
+    antigravity,
+    isAntigravity,
+    isWorkbuddy,
+    allSources,
+    refreshAll,
+    miniView,
+  } = sources;
+  const showingCodex = !isWorkbuddy && !isAntigravity;
+  const activeSource = isAntigravity ? antigravity : isWorkbuddy ? wb : w;
   const subscription = useSubscription(
-    preferences.showSubscription,
+    preferences.codexEnabled && preferences.showSubscription,
     snapshot,
     now,
   );
@@ -45,36 +57,48 @@ export default function App() {
     document.addEventListener("keydown", listener);
     return () => document.removeEventListener("keydown", listener);
   }, [redeeming]);
-  const lowQuota = [300, 10080].some((m) => {
-    const value = remaining(snapshot?.windows.find((q) => q.minutes === m));
-    return value != null && value <= 10;
-  });
-  const lastUpdate = snapshot
-    ? new Date(snapshot.fetchedAt * 1000).toLocaleTimeString("zh-CN", {
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "尚未更新";
-  const statusText =
-    w.error ??
-    (!w.fresh && snapshot && !w.busy
-      ? `上次数据 ${lastUpdate}，等待刷新`
-      : null);
+  const lowQuota =
+    showingCodex &&
+    [300, 10080].some((m) => {
+      const value = remaining(snapshot?.windows.find((q) => q.minutes === m));
+      return value != null && value <= 10;
+    });
+  const statusText = sources.status(compact);
+  const refreshVisible =
+    compact && allSources ? refreshAll : activeSource.refresh;
+  const visibleBusy =
+    compact && allSources
+      ? w.busy || wb.busy || antigravity.busy
+      : activeSource.busy;
   return (
     <main
       className={`card ${compact ? "compact" : "expanded"} ${w.lifecycle.reduceTransparency ? "opaque" : ""} ${lowQuota ? "quota-alert" : ""}`}
     >
       {!compact && <ResizeEdges onError={w.setError} />}
       <CardHeader
-        subscription={subscription}
+        identity={
+          isAntigravity
+            ? {
+                name: "Antigravity",
+                plan: antigravity.snapshot?.plan ?? null,
+              }
+            : isWorkbuddy
+              ? {
+                  name: wb.snapshot?.name ?? "WorkBuddy",
+                  plan: wb.snapshot?.plan ?? null,
+                }
+              : undefined
+        }
+        onMiniView={miniView}
+        subscription={!showingCodex || allSources ? null : subscription}
         compact={compact}
         snapshot={snapshot}
         preferences={preferences}
-        busy={w.busy}
+        busy={visibleBusy}
         settings={w.settings}
         selection={!!selection}
         redeeming={redeeming}
-        onRefresh={w.refresh}
+        onRefresh={refreshVisible}
         onSettings={() => w.setSettings(true)}
         onBack={back}
         onToggle={() => void w.update({ compact: !preferences.compact })}
@@ -100,26 +124,13 @@ export default function App() {
           onConfirm={redemption.confirm}
         />
       ) : (
-        <>
-          <QuotaView
-            subscription={subscription?.full ?? null}
-            compact={compact}
-            snapshot={snapshot}
-            busy={w.busy}
-            now={now}
-          />
-          {!compact && (
-            <CreditList
-              snapshot={snapshot}
-              now={now}
-              busy={w.busy}
-              fresh={w.fresh}
-              preferences={preferences}
-              lastUpdate={lastUpdate}
-              onChoose={redemption.choose}
-            />
-          )}
-        </>
+        <SourceContent
+          widget={w}
+          sources={sources}
+          compact={compact}
+          subscription={subscription?.full ?? null}
+          onChoose={redemption.choose}
+        />
       )}
       {statusText && (
         <div className="status-banner" role="status">
@@ -128,22 +139,28 @@ export default function App() {
           {!selection && !w.settings && (
             <button
               aria-label="重试刷新"
-              onClick={() => void w.refresh()}
-              disabled={w.busy}
+              onClick={() => void refreshVisible()}
+              disabled={visibleBusy}
             >
               <RefreshCw size={13} />
             </button>
           )}
         </div>
       )}
-      {w.notice && (!compact || !statusText) && (
-        <div className="notice" role="status">
-          <span title={w.notice}>{w.notice}</span>
-          <button aria-label="关闭提示" onClick={() => w.setNotice(null)}>
-            <X size={13} />
-          </button>
-        </div>
-      )}
+      {w.notice &&
+        preferences.codexEnabled &&
+        (showingCodex || (compact && allSources)) &&
+        (!compact || !statusText) && (
+          <div className="notice" role="status">
+            <span title={w.notice}>
+              {compact && allSources ? "Codex · " : ""}
+              {w.notice}
+            </span>
+            <button aria-label="关闭提示" onClick={() => w.setNotice(null)}>
+              <X size={13} />
+            </button>
+          </div>
+        )}
       {w.demo && !selection && (
         <div className="demo-label">演示模式 · 不连接真实账号</div>
       )}

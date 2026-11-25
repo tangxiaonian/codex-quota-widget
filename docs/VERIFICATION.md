@@ -100,6 +100,36 @@ tray 图标实际隐藏的系统级效果（菜单栏区域视觉确认）受录
 
 - 已结束演示及隔离验收进程，启动最终 Release 应用并恢复用户原有配置；未启用登录启动、未提交 Git。
 
+## 2026-11-12 WorkBuddy 多来源接入
+
+- Rust 12 项模拟/存储测试通过；两个真实账号测试默认跳过。已单独运行 WorkBuddy 真实只读测试，成功读取当前账号积分、总量和三个分组，未输出凭据原文。
+- TypeScript 13 项测试通过，涵盖积分精度、未知值和按已启用来源跟随显示。
+- WebKit 模拟页面验证 360×104 下的双来源、单 Codex、单 WorkBuddy、错误提示及仅启用一个来源，无横向溢出、无需滚动、提示不遮挡额度。验证点击来源进入详情、切换 Codex 保留两项额度、来源开关至少保留一项；模拟 WorkBuddy 网络失败保留积分、登录失效清除积分、恢复登录后重新读取成功。
+- Release .app 构建通过并已启动。本机屏幕处于锁定状态，实际原生窗口点击与截图未完成，不能据此宣称原生交互全量验收通过。
+- WorkBuddy 汇总接口没有提供到期日期、今日/月度消耗，本次实现按实际数据省略这些字段。真实重置卡未消费。
+
+### 多来源自查与修正（2026-11-12）
+
+- 规范审查发现两项 P2：Codex 操作提示跨来源显示、旧版 uid+JWT 前缀未归一化，均已修复。需求审查发现一项 P2：两种 WorkBuddy 迷你视图未提示低余额，已补齐。
+- 数据与状态自查修复三项：已用量改取 CycleUsedCapacity；切换账号且网络失败时清除前一账号积分；来源开关改变跟随条件时，设置页保持可见至关闭。
+- TypeScript 14 项、Rust 13 项模拟/存储测试通过。Rust 两项真实账号测试默认跳过，WorkBuddy 已单独执行真实只读查询。
+- WebKit 额外验证低余额在两种迷你模式变红、登录失效清空/恢复、Codex 模拟用卡提示切至 WorkBuddy 后消失。模拟用卡仅在明确不含 Tauri bridge 的浏览器假数据页面执行。
+- 屏幕仍锁定，原生点击、真实应用退出/重启跟随行为仍未全量验收。
+
+### 积分到期日与迷你进度条（2026-11-12）
+
+- 真实只读查询成功获取 19 个可用积分包，19 个均解析到到期时间，汇总余额保持独立。
+- TypeScript 15 项、Rust 14 项测试通过，覆盖日期解析不混用周期结束时间、未知日期后排、排序不改变快照。
+- WebKit 验证双来源总览的 3 条进度条、单 WorkBuddy 的进度条、单 Codex 的既有两条进度条；360×104 下正常、低余额和异常提示均无溢出遮挡。展开态验证赠送包在无日期的套餐包前。
+
+- 随后桌面解锁，已在原生窗口打开 WorkBuddy 详情，通过可访问性树核对 19 条包日期按升序排列。已收起为双来源迷你条并截取本机窗口，目视确认 Codex 两条进度、WorkBuddy 一条进度完整展示，未遮挡文字。
+
+### 迷你来源切换与标签对齐（2026-11-12）
+
+单来源视图原来的全透明图标覆盖选择器已替换为始终可见的来源下拉框。WebKit 验证全部来源、Codex、WorkBuddy 多次往返，控件不隐藏且 360×104 不溢出；原生菜单已验证 WorkBuddy 切回全部来源。Codex 5h/周标签分别置于各自条上方，并按用户要求右对齐到对应条的右端，与 WorkBuddy 读数一致。
+
+- 新版原生窗口再次验证 Codex → 全部来源成功；最终截图确认 Codex 5h、周读数各自在对应条的上方且右对齐，WorkBuddy 读数右对齐。原生窗口保持迷你总览。
+
 ## 2026-11-15：常驻内存诊断与网络会话复用
 
 - 开始时位于 main（03f742b），保留已有未提交的 WorkBuddy 与界面改动；本轮未提交代码。
@@ -110,3 +140,62 @@ tray 图标实际隐藏的系统级效果（菜单栏区域视觉确认）受录
 - `CARGO_NET_OFFLINE=true npm run test:rust`：14 项通过，2 项真实服务测试默认跳过。`CARGO_NET_OFFLINE=true npm run desktop:build`：Release .app 构建通过。
 - 单独执行更新后的 `workbuddy::live_summary` 真实只读测试通过，获取 23 个可用包且全部解析到日期。原生修复版重启后可访问性树显示真实 Codex 额度与订阅日期，未使用重置卡。
 - 新主进程 PID 82132，启动后约 2 分钟和 3 分钟的 physical footprint 分别为 22.52、21.58 MiB；后一次 `leaks` 检测为 27,104 字节。这里比较的是旧常驻进程与新进程短时采样，不承诺连续运行数天保持同一数值。WebKit、图形和网络辅助进程仍有各自开销，未做长期完整进程树资源验收。
+
+## 2026-11-22 Antigravity CLI 额度
+
+- 本机 Antigravity 2.33.0 的本地额度接口对未授权请求返回 401。首版采用官方 CLI 报告，桌面端仅用于跟随显示。
+- `agy` 1.5.13 的真实只读报告回传 3 个模型组、5 个额度窗口，5 个均解析到恢复时间。Rust 的 `antigravity::tests::live_usage` 通过，解析器要求报告是 `/usage` 且模型回合数为零。
+- TypeScript 16 项、Rust 15 项常规测试通过。WebKit 演示验证三来源四条进度、迷你和展开切换、状态提示不遮挡、设置切换与至少保留一个来源。真实额度通过 Rust 入口单独验证。
+- Release 构建通过，应用包执行本机临时签名并通过 `codesign --verify --strict`。重启后通过原生窗口确认新版正常显示。Antigravity 开关上线默认关闭，真实额度与界面的组合验证覆盖 Rust 查询和 WebKit 演示两个环节。
+
+### Antigravity Token 直连验证
+
+- 本机 Antigravity 2.34.0 使用登录钥匙串，备用凭据文件不存在。临时探针完成一次用户授权后直接查额度，HTTP 200，0.85 秒，返回一组 5 小时和周窗口。
+- 直连候选应用完成钥匙串授权后请求同一接口，返回 HTTP 403 `SUBSCRIPTION_REQUIRED`。当前机器的官方 CLI 对照仍成功返回 3 组、5 个窗口，故直连不替换当前可用版本。
+- Rust 15 项、TypeScript 16 项通过，Release 构建通过。WebKit 模拟验收覆盖静默读取、用户主动授权和授权后显示。原生应用证实静默路径及时显示授权入口，当前账号下直连额度未通过端到端验收。
+
+### 2026-11-23 切换至无 CLI 版本
+
+- 按用户要求切换运行包，Antigravity 只使用桌面端 Token 直连。已退出上一版 CLI 小组件，Release 重新构建并通过本机签名校验。
+- TypeScript 16 项测试通过。最终包启动后原生卡片显示「Antigravity 桌面端」与手动钥匙串授权入口，静默读取未弹窗。先前授权后收到的 `SUBSCRIPTION_REQUIRED` 仍是该账号的直连验收边界。
+
+### 2026-11-23 桌面端额度可见但直连失败
+
+- 用户确认 Antigravity 桌面端 Models 显示额度。旧小组件重试复现「登录凭据不可用」，该提示合并了本地凭据无效与服务端 HTTP 401。
+- 新增独立诊断区分本机登录记录格式、Access Token 到期和 Google 401。使用模拟数据验证缺少 Token、RFC3339 小数秒到期时间及 Go 默认未设置的日期；Release 包构建和本机签名校验通过。
+- 新包启动后经本机钥匙串授权，实际卡片显示「本机 Antigravity Access Token 已过期，等待桌面端续期」。这次错误在发起网络请求前产生。桌面端自身取数与本地共享登录记录的 Token 续期行为仍需区分，未验证该账号可持续直连。
+
+### 2026-11-23 使用桌面端 Models 页面
+
+- 经用户授权，临时探针向 Google 续期两次均得到 HTTP 200。新 Access Token 查询 `retrieveUserQuotaSummary` 仍返回 HTTP 403 `SUBSCRIPTION_REQUIRED`。桌面端日志显示其定期调用 `loadCodeAssist`、`fetchAvailableModels`。同一当前账号的新 Token 查询前者返回 200，但响应没有项目上下文，查询后者返回 403。未将这次探针的自动续期加入小组件。
+- macOS 辅助功能读取本机 Antigravity 2.34.0 的英文 Models 页面，检测到两个模型组、四个额度窗口。直接链接生产原生模块的探针耗时约 79 毫秒。百分比按页面的 Remaining 字段展示，恢复时间从桌面端倒计时估算，页面没有倒计时时保留未知。
+- Rust 常规测试 16 项、TypeScript 测试 16 项通过。两项 Rust 真实服务测试默认跳过。刷新未启动 Antigravity CLI，未调用重置卡消费接口。
+- Release 应用已重新构建、本机临时签名并通过签名验证。系统日志确认当前小组件已获辅助功能授权。Antigravity Models 页打开后，原生卡片手动刷新成功，与同次读取的 Models 数据一致。Gemini 5 小时剩余 73%、周剩余 89%，两项均显示恢复倒计时。展开态显示 Claude/GPT 两项均为 100%，迷你态仅显示 Gemini 两条进度条。验证后恢复原来的展开状态。
+
+### 独立 OAuth 授权核查
+
+- 静态比对确认 Cockpit Tools 的默认 Antigravity OAuth 客户端标识与本机官方桌面端一致。[OAuth 实现](https://github.com/jlcodes99/cockpit-tools/blob/main/crates/cockpit-core/src/modules/oauth.rs)
+- Google 提供通用桌面 OAuth 流程。本次未在 Google 的公开文档中找到第三方客户端可调用的个人 Antigravity 剩余额度接口或对应的只读授权范围。官方 SDK 的 `usage_metadata` 描述单轮及累计 Token 用量。Antigravity 使用条款第 6 条明确限制通过第三方工具访问该服务。[Google 桌面 OAuth](https://developers.google.com/identity/protocols/oauth2/native-app) · [Antigravity SDK](https://antigravity.google/blog/introducing-google-antigravity-sdk) · [Antigravity 使用条款](https://antigravity.google/terms)
+
+### 2026-11-24 浏览器 OAuth 验证范围
+
+- 用户确认，Cockpit Tools 中的 Antigravity 账号通过浏览器 OAuth 授权导入。本机 Cockpit Tools 1.3.81 当天日志记录了三次 `retrieveUserQuotaSummary` 返回 HTTP 200，并将三次响应合并到额度数据。
+- 之前的 HTTP 403 来自复用桌面端钥匙串凭据的临时探针，只适用于当时的凭据和请求。后续以小组件自身的浏览器 OAuth 流程获取授权，并通过小组件的真实刷新入口验证剩余额度和恢复时间。按用户要求停止使用临时凭据探针。
+
+### 小组件独立 OAuth 实现
+
+- 已实现小组件发起的浏览器 OAuth、PKCE 与本机回调、专属钥匙串、过期续期和额度请求。清除了旧的 Models 读取和桌面端凭据路径。
+- 本机回调测试通过实际回环套接字收取模拟授权码，另有状态不匹配、错误路径及用户拒绝用例。Rust 17 项、TypeScript 16 项通过。Release 应用完成构建和本机临时签名，签名检查通过。真实 Google 授权及额度刷新仍需获准读取 Antigravity 个人额度的 Google 桌面 OAuth 客户端配置，本机尚未提供。
+
+### Google 桌面客户端真实授权验收
+
+- 导入用户提供的 Google 桌面客户端配置后，从 Release 小组件的「使用 Google 授权」发起真实流程。Google 授权页返回 HTTP 400 `invalid_scope`，明确拒绝 `https://www.googleapis.com/auth/aicode`。流程在发出授权码前终止，未进入令牌交换和额度查询阶段。此结果适用于本次提供的小组件 OAuth 客户端。
+
+### 2026-11-25 替换为本机 Language Server + agy CLI 双路线
+
+- 移除浏览器 OAuth、回环回调、专属钥匙串及 Google 后端直连代码（删除 `antigravity/callback.rs`、`oauth.rs`、`quota.rs` 及前端「使用 Google 授权」入口）。
+- 改为本机 `language_server`（`127.0.0.1` 回环 HTTPS + `KERN_PROCARGS2` 读取 `ANTIGRAVITY_SERVER_CSRF_TOKEN` + 仅限 `127.0.0.1` 放行自签名证书）优先、官方 `agy >= 1.1.11` CLI（`--log-file /dev/null -p "/usage" --output-format json`）兜底。
+- `npm run build` 通过；`npm test` 16 项通过；`CARGO_NET_OFFLINE=true npm run test:rust` 20 项常规单测通过（覆盖 `KERN_PROCARGS2` 环境变量提取、多进程优先级与非 Antigravity 过滤、`lsof` 端口去重、`agy` 版本下限校验、CLI snake_case 与 Language Server camelCase 报告解析）。
+- 本机真实只读测试 `antigravity::tests::live_local_or_cli_quota` 通过（耗时 0.32s），命中 `source=languageServer`、`plan=Some("Pro")`、`groups=2`，全程未触发钥匙串弹窗、未发起 OAuth 请求、未调用 Codex 重置卡消费接口。
+- `CARGO_NET_OFFLINE=true npm run desktop:build` 通过，生成本机 Release 应用包 `src-tauri/target/release/bundle/macos/Codex Quota Widget.app`（13.01 MiB，未做正式分发签名/公证）。
+- 未覆盖项：关闭 Antigravity 桌面端后的 `agy` CLI 真实兜底路径、原生应用重启后的窗口手工点击验收与多屏回归。

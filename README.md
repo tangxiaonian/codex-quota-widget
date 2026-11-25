@@ -19,6 +19,23 @@
 - **多屏定位**：按窗口所在显示器恢复位置，支持负坐标和不同缩放比例；物理多屏验收范围见验证记录
 - **订阅有效期**：偏好设置 → 显示订阅有效期（默认关闭）。开启后，展开卡片和迷你条都在邮箱下显示订阅有效期与剩余天数；迷你条使用短日期，鼠标停在日期上可查看具体时间。
 
+## WorkBuddy 与多来源视图
+
+迷你条通过左侧选择器切换「全部来源 / Codex / WorkBuddy」。全部来源保留 Codex 的 5 小时、周额度及 WorkBuddy 积分，点击来源行可展开该来源详情。展开卡片顶部切换来源，设置中可分别启用，至少保留一个来源。首次升级默认同时启用两个来源。
+
+WorkBuddy 使用本机当前登录账号，只读读取当前用户的 `Library/Application Support/CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info`。加密字段通过已安装 WorkBuddy 的 Node 运行时在内存中解码，支持按应用标识发现安装位置及用户 Applications 目录；未安装、未登录、加密格式不支持时提示重新登录或更新客户端。不会写入 WorkBuddy 登录文件。积分请求固定发往 `https://copilot.tencent.com/billing/meter/` 下的 `get-user-resource-summary`、`get-user-resource-paid-packages`、`get-user-resource-free-packages` 三个只读接口，使用 macOS 网络代理与证书设置。
+
+界面展示接口实际返回的套餐、积分剩余量、积分总量和有效积分包。积分包分页读取，最近到期优先，未知日期排最后。到期日来自扣除结束时间或包过期时间，保留年/月/日和时分；套餐周期结束时间不当作包过期日。明细失败时显示提示，汇总仍可使用。今日消耗、本月消耗暂未接入。各来源分别刷新，失败时标明异常，网络失败可保留本次会话的上次数据。WorkBuddy 登录失效时清除该来源显示，凭据不进入前端、SQLite 或日志。登录启动仍需用户在设置中主动开启。
+
+## Antigravity 额度
+
+Antigravity 默认关闭，可在偏好设置中启用。为避免触发第三方 OAuth 条款风控，小组件不读取或保存任何 Google OAuth 凭据，采用本机双路线只读查询：
+
+- **主路线（桌面端）**：优先查询本机运行中的 `Antigravity.app` / `Antigravity IDE.app` 本地 `language_server`（仅限 `127.0.0.1` 回环 HTTPS），返回各模型组额度与套餐名称。
+- **兜底路线（`agy` CLI）**：桌面端未运行时，尝试调用本机 `agy` CLI（强制校验版本 `>= 1.1.11` 后执行只读 `/usage`，不触发模型对话、不消耗额度）。
+
+恢复时间以服务端返回为准。迷你视图隐藏 Claude / GPT 组，迷你总览显示其余额度里剩余比例最低的窗口。三个来源同时开启时，总览为 360×128，其余迷你视图为 360×104。
+
 ## 技术栈
 
 - **Tauri 2** + Rust（后端、托盘、单实例）

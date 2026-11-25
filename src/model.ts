@@ -30,7 +30,18 @@ export interface WindowSize {
   width: number;
   height: number;
 }
+export type SourceId = "codex" | "workbuddy" | "antigravity";
+export const sourceOptions = [
+  { id: "codex", name: "Codex", enabled: "codexEnabled" },
+  { id: "workbuddy", name: "WorkBuddy", enabled: "workbuddyEnabled" },
+  { id: "antigravity", name: "Antigravity", enabled: "antigravityEnabled" },
+] as const;
 export interface Preferences {
+  codexEnabled: boolean;
+  workbuddyEnabled: boolean;
+  antigravityEnabled: boolean;
+  selectedSource: SourceId;
+  compactView: "all" | "current";
   showSubscription: boolean;
   expandedSize: WindowSize | null;
   compact: boolean;
@@ -43,6 +54,8 @@ export interface Preferences {
   y: number | null;
 }
 export interface Lifecycle {
+  workbuddyRunning?: boolean;
+  antigravityRunning?: boolean;
   running: boolean;
   sleeping: boolean;
   reduceTransparency: boolean;
@@ -54,6 +67,11 @@ export interface Bootstrap {
   demo?: boolean;
 }
 export const defaults: Preferences = {
+  codexEnabled: true,
+  workbuddyEnabled: true,
+  antigravityEnabled: false,
+  selectedSource: "codex",
+  compactView: "all",
   showSubscription: false,
   expandedSize: null,
   compact: true,
@@ -65,6 +83,21 @@ export const defaults: Preferences = {
   x: null,
   y: null,
 };
+/** Follow only the desktop applications whose quota source is enabled. */
+export function sourceRunning(state: Lifecycle, prefs: Preferences): boolean {
+  return (
+    (prefs.codexEnabled && state.running) ||
+    (prefs.workbuddyEnabled && !!state.workbuddyRunning) ||
+    (prefs.antigravityEnabled && !!state.antigravityRunning)
+  );
+}
+/** Reserve space for a third row only in the three-source overview. */
+export function compactHeight(prefs: Preferences): number {
+  return prefs.compactView === "all" &&
+    sourceOptions.every((source) => prefs[source.enabled])
+    ? 128
+    : 104;
+}
 /** Preserve unknown as unknown; progress must never fabricate an empty or full quota. */
 export function remaining(window?: QuotaWindow): number | null {
   const used = window?.usedPercent;

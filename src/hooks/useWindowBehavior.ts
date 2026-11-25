@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as bridge from "../bridge";
-import type { Preferences } from "../model";
+import { compactHeight, type Preferences } from "../model";
 import { WindowController } from "../window/controller";
 import type { WindowMode } from "../window/geometry";
 
@@ -53,8 +53,11 @@ export function useWindowBehavior(
       controller.current = null;
     };
   }, [ready, save, onError]);
+  const miniHeight = compactHeight(preferences);
   useEffect(() => {
     if (ready)
-      void controller.current?.enter(mode).catch((e) => onError(String(e)));
-  }, [ready, mode, onError]);
+      void controller.current
+        ?.enter(mode, miniHeight)
+        .catch((e) => onError(String(e)));
+  }, [ready, mode, miniHeight, onError]);
 }

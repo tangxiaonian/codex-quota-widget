@@ -109,3 +109,31 @@ flowchart LR
 ## 只读网络会话生命周期（2026-11-15）
 
 订阅与 WorkBuddy 的只读 HTTPS 查询共用 `native/quota_http.m` 中进程级的临时 NSURLSession。避免每次请求创建、销毁会话时在本机系统网络栈中累积代理配置 XPC 对象；请求各自携带当前身份与超时，不使用 Cookie、URL 缓存或共享凭据存储。
+
+## WorkBuddy 与多来源实现（2026-11-12）
+
+- `useWidget` 保留 Codex 数据与消费流程；`useWorkbuddy` 单独管理 WorkBuddy 的请求、错误、内存快照和定时器；`useSources` 协调来源选择与刷新入口。
+- `SourceContent` 只组合视图；`SourceNavigation`、`MultiSourceMini`、`WorkbuddyMini`、`WorkbuddyView` 分别负责来源切换、双来源迷你条、单来源积分条和积分详情。Codex 的 Gauge、CreditList、确认流程继续独立使用。
+- Rust `workbuddy/mod.rs` 调度本机登录态和固定只读请求，`parse.rs` 归一化资源数据，`read_session.cjs` 仅在 WorkBuddy 运行时读取当前会话。原生 `workbuddy_http.m` 使用 NSURLSession，遵循系统代理和证书校验，禁止重定向。
+- 接口 `refresh_workbuddy` 在阻塞工作线程执行，返回经过筛选的账号标识、显示名称、套餐、积分、分组和更新时间。接口响应与凭据原文不传给界面。
+- `Packages` 汇总余额，`CreditGroups` 提供分组名称与余额，分别使用，避免重复累计。未知数字保留 null。WorkBuddy 汇总日期缺失时不根据令牌有效期或套餐名推算。
+- 生命周期增加 WorkBuddy bundle 检测，跟随显示取已启用且运行的应用。保留原偏好键 `followCodex` 以兼容存量数据，设置文案为随已启用应用显示。
+
+### 自查修正
+
+汇总已用量直接取 `CycleUsedCapacity`，不使用总量减剩余量，以免把冻结积分当作已用。WorkBuddy 查询携带界面已显示的 `expectedAccountKey`，网络失败时若本机账号已变更，清除前一个账号的展示。旧版 `uid+JWT` 先移除 uid 前缀。迷你条和展开态共用同一低余额判定，Codex 操作提示限定来源。来源开关导致跟随条件不满足时，设置页保持可见至用户关闭。
+
+### 积分包有效期与迷你进度条（2026-11-12）
+
+`workbuddy/api.rs` 负责三个固定路由的原生 HTTPS 查询。`packages.rs` 分页读取付费、免费有效积分包（Status=0、OnlyValidPeriod=true），按 ResourceId 去重。余额、总量、已用仍以汇总为准，明细不重复累加。包日期优先 DeductionEndTime，其次 ExpiredTime，不以 CycleEndTime 替代；支持带时区日期、Unix 时间和腾讯无时区账单日期（按中国标准时间解析）。
+
+Snapshot 新增 packageError，明细请求失败时保留新汇总并显示提示。Package 新增稳定 id，前端按 expiresAt 升序、未知最后排序。MiniProgress 复用到双来源总览与 WorkBuddy 单来源迷你条，Codex 总览分别呈现 5 小时、周两个 meter，未知额度只显示空轨道及未知说明。
+
+## Antigravity 账号额度
+
+为避免触发 Google 对第三方 Antigravity OAuth 访问的条款风控，小组件彻底移除浏览器 OAuth、钥匙串凭据与直连 Google 后端路径，改为与本机官方产品一致的双路线只读读取：
+
+- `antigravity/server.rs`（主路线）：按 `Antigravity.app` 优先于 `Antigravity IDE.app` 的顺序发现当前用户运行中的 `language_server` 进程；优先读取旧版 `--csrf_token` 参数，缺失时通过 macOS `sysctl(CTL_KERN, KERN_PROCARGS2, pid)` 仅提取环境变量 `ANTIGRAVITY_SERVER_CSRF_TOKEN`，并通过 `lsof` 遍历其监听端口。
+- `native/antigravity_http.m`：使用独立进程级、禁用代理的临时 `NSURLSession` 向 `https://127.0.0.1:<port>` 发起只读 POST（`RetrieveUserQuotaSummary` 与 `GetUserStatus`），禁止重定向，自签名证书仅对 `127.0.0.1` 放行。仅提取额度窗口与 `planName`，不读取或回传个人邮箱；遇到多进程 401 时继续遍历其他候选进程与端口。
+- `antigravity/cli.rs`（兜底路线）：桌面端未运行或未返回额度时，尝试定位本机 `agy`（含 `~/.gemini/bin/agy`），严格校验 `agy --version >= 1.1.11` 后执行 `agy --log-file /dev/null -p "/usage" --output-format json`（防旧版把 `/usage` 当作模型输入消耗额度）。
+- `useAntigravity` 管理该来源的刷新与内存快照；Antigravity 桌面端启停事件同时触发一次刷新并参与窗口跟随。迷你总览仅在三个来源均启用时增加到 128pt，来源切换可以调整高度，普通额度刷新不改变窗口尺寸。

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 600" width="680" role="img">
+<title>WorkBuddy 积分展开详情态原型</title>
+<desc>展示积分制来源在展开态的布局：跨来源告警条、积分主读数、进度条、三列辅助指标、有效期档位区块</desc>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+
+<!-- 卡片 -->
+<rect x="40" y="28" width="400" height="544" rx="16" fill="#ffffff" stroke="#e3e8ec" stroke-width="0.5"/>
+
+<!-- 顶部产品身份条 -->
+<text x="60" y="58" font-family="system-ui" font-size="14" font-weight="500" fill="#16313f">额度卡片</text>
+<text x="60" y="74" font-family="system-ui" font-size="11" fill="#4d6570">多来源额度聚合</text>
+
+<!-- 来源 chips -->
+<rect x="300" y="44" width="58" height="26" rx="13" fill="#f1f3f5" stroke="#e3e8ec" stroke-width="0.5"/>
+<text x="329" y="61" font-family="system-ui" font-size="12" fill="#4d6570" text-anchor="middle">Codex</text>
+<rect x="366" y="44" width="66" height="26" rx="13" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.5"/>
+<text x="399" y="61" font-family="system-ui" font-size="12" fill="#0F6E56" text-anchor="middle">WorkBuddy</text>
+
+<!-- 跨来源聚合告警条（Codex 快见底） -->
+<rect x="56" y="92" width="368" height="34" rx="8" fill="#fbeaea" stroke="#f09595" stroke-width="0.5"/>
+<circle cx="74" cy="109" r="4" fill="#a32d2d"/>
+<text x="86" y="109" font-family="system-ui" font-size="12" fill="#a32d2d">Codex 周额度仅剩 9% · 即将耗尽（来自另一来源）</text>
+
+<!-- 来源标题行 -->
+<rect x="60" y="148" width="28" height="28" rx="7" fill="#AFA9EC"/>
+<text x="74" y="167" font-family="system-ui" font-size="14" font-weight="500" fill="#26215C" text-anchor="middle">W</text>
+<text x="98" y="162" font-family="system-ui" font-size="14" font-weight="500" fill="#16313f">WorkBuddy</text>
+<text x="98" y="178" font-family="system-ui" font-size="12" fill="#4d6570">alex@example.com</text>
+<circle cx="406" cy="162" r="4" fill="#1D9E75"/>
+<text x="398" y="178" font-family="system-ui" font-size="11" fill="#4d6570" text-anchor="end">已连接</text>
+
+<!-- 主读数 -->
+<text x="60" y="232" font-family="system-ui" font-size="34" font-weight="500" fill="#16313f">12,480</text>
+<text x="200" y="232" font-family="system-ui" font-size="13" fill="#4d6570">积分</text>
+<text x="60" y="252" font-family="system-ui" font-size="12" fill="#4d6570">剩余 · 总量 50,000</text>
+
+<!-- 进度条 -->
+<rect x="60" y="270" width="368" height="10" rx="5" fill="#eef2f4"/>
+<rect x="60" y="270" width="92" height="10" rx="5" fill="#1D9E75"/>
+<text x="424" y="279" font-family="system-ui" font-size="11" fill="#4d6570" text-anchor="end">25%</text>
+
+<!-- 三列辅助指标 -->
+<rect x="60" y="300" width="116" height="58" rx="8" fill="#f7f9fa" stroke="#eef2f4" stroke-width="0.5"/>
+<text x="74" y="322" font-family="system-ui" font-size="11" fill="#4d6570">有效期至</text>
+<text x="74" y="344" font-family="system-ui" font-size="14" fill="#16313f">2026-12-31</text>
+
+<rect x="184" y="300" width="116" height="58" rx="8" fill="#f7f9fa" stroke="#eef2f4" stroke-width="0.5"/>
+<text x="198" y="322" font-family="system-ui" font-size="11" fill="#4d6570">今日消耗</text>
+<text x="198" y="344" font-family="system-ui" font-size="14" fill="#16313f">320</text>
+
+<rect x="308" y="300" width="116" height="58" rx="8" fill="#f7f9fa" stroke="#eef2f4" stroke-width="0.5"/>
+<text x="322" y="322" font-family="system-ui" font-size="11" fill="#4d6570">本月消耗</text>
+<text x="322" y="344" font-family="system-ui" font-size="14" fill="#16313f">8,200</text>
+
+<!-- 档位 + 有效期区块（替换重置卡） -->
+<rect x="60" y="378" width="364" height="120" rx="10" fill="#fbfcfd" stroke="#eef2f4" stroke-width="0.5"/>
+<text x="74" y="400" font-family="system-ui" font-size="13" font-weight="500" fill="#16313f">档位与有效期</text>
+<rect x="74" y="412" width="80" height="24" rx="6" fill="#EAF3DE" stroke="#639922" stroke-width="0.5"/>
+<text x="114" y="428" font-family="system-ui" font-size="12" fill="#27500A" text-anchor="middle">Pro 档</text>
+<text x="170" y="428" font-family="system-ui" font-size="12" fill="#4d6570">团队席位 · 5 人</text>
+
+<line x1="74" y1="450" x2="410" y2="450" stroke="#eef2f4" stroke-width="0.5"/>
+<text x="74" y="472" font-family="system-ui" font-size="12" fill="#4d6570">距有效期结束</text>
+<text x="74" y="494" font-family="system-ui" font-size="14" fill="#16313f">50 天</text>
+<text x="410" y="494" font-family="system-ui" font-size="11" fill="#4d6570" text-anchor="end">&lt;7 天转淡金提醒</text>
+
+<!-- 底部 -->
+<text x="60" y="548" font-family="system-ui" font-size="11" fill="#4d6570">最近刷新 23:03 · 每分钟</text>
+<text x="424" y="548" font-family="system-ui" font-size="11" fill="#0f8f8a" text-anchor="end">设置 ↗</text>
+</svg>

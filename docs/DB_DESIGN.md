@@ -70,3 +70,9 @@ quota_window 和 reset_credit 的 account_key 外键关联 account_cache，ON DE
 本次只扩展设置 JSON 可选字段，不改表结构，schema 仍为 v1。Rust 测试覆盖旧 JSON 兼容与展开尺寸重开后保持。
 
 设置 JSON 新增可选 `showSubscription`，缺失时为 false。订阅有效期仅保存在显示会话内，SQLite 不存储日期和令牌。
+
+## 多来源偏好（2026-11-12）
+
+偏好 JSON 新增 `codexEnabled`、`workbuddyEnabled`（存量缺失时均为 true）、`selectedSource`（默认 codex）、`compactView`（默认 all）。至少启用一个来源。WorkBuddy 快照仅保存在前端会话内存，未新增数据库表；重启后重新读取当前账号。
+
+Antigravity 增加偏好字段 `antigravityEnabled`，旧偏好缺少该字段时默认关闭。`selectedSource` 支持 `antigravity`。额度只保留在会话内存快照中；不读取、不保存任何 Google OAuth 凭据或钥匙串项，SQLite 无需新增表。

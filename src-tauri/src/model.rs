@@ -55,6 +55,16 @@ pub struct WindowSize {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Preferences {
+    #[serde(default = "default_true")]
+    pub codex_enabled: bool,
+    #[serde(default = "default_true")]
+    pub workbuddy_enabled: bool,
+    #[serde(default)]
+    pub antigravity_enabled: bool,
+    #[serde(default = "default_source")]
+    pub selected_source: String,
+    #[serde(default = "default_compact_view")]
+    pub compact_view: String,
     /// Logical points; absent in older saved preferences.
     #[serde(default)]
     pub expanded_size: Option<WindowSize>,
@@ -71,6 +81,12 @@ pub struct Preferences {
     pub x: Option<i32>,
     pub y: Option<i32>,
 }
+fn default_source() -> String {
+    "codex".into()
+}
+fn default_compact_view() -> String {
+    "all".into()
+}
 fn default_true() -> bool {
     true
 }
@@ -78,6 +94,11 @@ impl Default for Preferences {
     /// New installs begin in the unobtrusive compact layout.
     fn default() -> Self {
         Self {
+            codex_enabled: true,
+            workbuddy_enabled: true,
+            antigravity_enabled: false,
+            selected_source: default_source(),
+            compact_view: default_compact_view(),
             expanded_size: None,
             show_subscription: false,
             compact: true,
@@ -94,6 +115,18 @@ impl Default for Preferences {
 impl Preferences {
     /// Reject invalid intervals rather than silently persisting an unusable timer.
     pub fn validate(&self) -> Result<(), String> {
+        if !self.codex_enabled && !self.workbuddy_enabled && !self.antigravity_enabled {
+            return Err("请至少启用一个额度来源".into());
+        }
+        let selected_enabled = match self.selected_source.as_str() {
+            "codex" => self.codex_enabled,
+            "workbuddy" => self.workbuddy_enabled,
+            "antigravity" => self.antigravity_enabled,
+            _ => false,
+        };
+        if !selected_enabled || !["all", "current"].contains(&self.compact_view.as_str()) {
+            return Err("额度视图设置无效".into());
+        }
         if let Some(size) = &self.expanded_size {
             if !size.width.is_finite()
                 || !size.height.is_finite()
@@ -245,6 +278,7 @@ mod tests {
         )
         .unwrap();
         assert!(p.show_tray_icon);
+        assert!(!p.antigravity_enabled);
         assert!(p.expanded_size.is_none());
     }
 }

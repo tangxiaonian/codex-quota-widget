@@ -7,6 +7,14 @@ static NSMutableArray *observers;
 bool cq_codex_running(void) {
     return [NSRunningApplication runningApplicationsWithBundleIdentifier:@"com.openai.codex"].count > 0;
 }
+/// WorkBuddy lifecycle is independent of Codex and is observed by bundle identity.
+bool cq_workbuddy_running(void) {
+    return [NSRunningApplication runningApplicationsWithBundleIdentifier:@"com.tencent.workbuddy.mac"].count > 0;
+}
+/// Detect the desktop app without inspecting the CLI account or its credentials.
+bool cq_antigravity_running(void) {
+    return [NSRunningApplication runningApplicationsWithBundleIdentifier:@"com.google.antigravity"].count > 0;
+}
 /// Emit only lifecycle and accessibility state; no account information crosses this bridge.
 static void emitState(void) {
     if (stateChanged) stateChanged(cq_codex_running(), sleeping, NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceTransparency);
@@ -20,7 +28,7 @@ void cq_observe(void (*callback)(bool, bool, bool)) {
         id observer = [center addObserverForName:name object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
             if ([note.name isEqualToString:NSWorkspaceDidLaunchApplicationNotification] || [note.name isEqualToString:NSWorkspaceDidTerminateApplicationNotification]) {
                 NSRunningApplication *application = note.userInfo[NSWorkspaceApplicationKey];
-                if (![application.bundleIdentifier isEqualToString:@"com.openai.codex"]) return;
+                if (![application.bundleIdentifier isEqualToString:@"com.openai.codex"] && ![application.bundleIdentifier isEqualToString:@"com.tencent.workbuddy.mac"] && ![application.bundleIdentifier isEqualToString:@"com.google.antigravity"]) return;
             }
             if ([note.name isEqualToString:NSWorkspaceWillSleepNotification]) sleeping = true;
             if ([note.name isEqualToString:NSWorkspaceDidWakeNotification]) sleeping = false;

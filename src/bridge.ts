@@ -9,6 +9,7 @@ import {
   type Snapshot,
   type Lifecycle,
 } from "./model";
+import type { AntigravitySnapshot } from "./antigravity";
 export const native = "__TAURI_INTERNALS__" in window;
 let sample = demoSnapshot();
 let demo = !native || new URLSearchParams(location.search).has("demo");
@@ -18,6 +19,7 @@ export async function bootstrap(): Promise<Bootstrap> {
     return {
       preferences: {
         ...defaults,
+        antigravityEnabled: true,
         ...JSON.parse(localStorage.getItem("widget-demo-prefs") || "{}"),
       },
       cached: sample,
@@ -27,7 +29,12 @@ export async function bootstrap(): Promise<Bootstrap> {
   const state = await invoke<Bootstrap>("bootstrap");
   demo ||= !!state.demo;
   return demo
-    ? { ...state, preferences: { ...defaults }, cached: sample, demo: true }
+    ? {
+        ...state,
+        preferences: { ...defaults, antigravityEnabled: true },
+        cached: sample,
+        demo: true,
+      }
     : state;
 }
 /** Only this read command is used by timers, native events and the refresh button. */
@@ -35,6 +42,10 @@ export async function refresh(): Promise<Snapshot> {
   return demo
     ? { ...sample, fetchedAt: Math.floor(Date.now() / 1000) }
     : invoke<Snapshot>("refresh_snapshot");
+}
+/** Read Antigravity quota from the local language server or official `agy` CLI. */
+export function refreshAntigravity(): Promise<AntigravitySnapshot> {
+  return invoke("refresh_antigravity");
 }
 /** Demo dates are relative to the fixture; the native command exposes only the account's date. */
 export async function subscriptionUntil(

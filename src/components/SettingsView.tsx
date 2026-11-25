@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import * as bridge from "../bridge";
-import type { Preferences } from "../model";
+import { sourceOptions, type Preferences } from "../model";
 import { Switch } from "./Switch";
 /** Own settings form drafts and OS login-item status; never perform account operations. */
 export function SettingsView({
@@ -56,6 +56,48 @@ export function SettingsView({
   return (
     <section className="settings-view">
       <h1>偏好设置</h1>
+      {sourceOptions.map((source) => {
+        const enabled = preferences[source.enabled];
+        const replacement = sourceOptions.find(
+          (other) => other.id !== source.id && preferences[other.enabled],
+        );
+        return (
+          <div className="setting-row" key={source.id}>
+            <span>{source.name}</span>
+            <Switch
+              label={`启用 ${source.name}`}
+              checked={enabled}
+              disabled={enabled && !replacement}
+              onChange={() =>
+                void update({
+                  [source.enabled]: !enabled,
+                  ...(enabled &&
+                  preferences.selectedSource === source.id &&
+                  replacement
+                    ? { selectedSource: replacement.id }
+                    : {}),
+                })
+              }
+            />
+          </div>
+        );
+      })}
+      <p className="setting-help">
+        WorkBuddy 读取当前登录账号。Antigravity 优先读取运行中的桌面端，未运行时回退到本机 agy CLI。
+      </p>
+      <div className="setting-row">
+        <span>迷你条显示</span>
+        <select
+          aria-label="迷你条显示"
+          value={preferences.compactView}
+          onChange={(e) =>
+            void update({ compactView: e.target.value as "all" | "current" })
+          }
+        >
+          <option value="all">全部来源</option>
+          <option value="current">当前来源</option>
+        </select>
+      </div>
       <p className="subtitle">按你的节奏，安静地更新。</p>
       <div className="setting-row">
         <span>自动刷新</span>
@@ -111,7 +153,8 @@ export function SettingsView({
         />
       </div>
       <p className="setting-help">
-        优先读取本地日期。上期结束后，会使用当前账号向 ChatGPT 查询新日期，必要时由 Codex 刷新登录信息。
+        优先读取本地日期。上期结束后，会使用当前账号向 ChatGPT
+        查询新日期，必要时由 Codex 刷新登录信息。
       </p>
       <div className="setting-row">
         <span>始终置顶</span>
@@ -134,9 +177,9 @@ export function SettingsView({
         />
       </div>
       <div className="setting-row">
-        <span>随 Codex 显示卡片</span>
+        <span>随已启用应用显示卡片</span>
         <Switch
-          label="随 Codex 显示卡片"
+          label="随已启用应用显示卡片"
           checked={preferences.followCodex}
           onChange={() =>
             void update({ followCodex: !preferences.followCodex })
@@ -153,8 +196,7 @@ export function SettingsView({
         />
       </div>
       <p className="setting-help">
-        助手运行期间会跟随 Codex
-        启停。隐藏菜单栏图标后，展开卡片仍可进入设置恢复显示。
+        助手运行期间会跟随已启用应用显示。隐藏菜单栏图标后，展开卡片仍可进入设置恢复显示。
       </p>
       <button className="primary full" onClick={() => onClose()}>
         完成 <Check size={15} />

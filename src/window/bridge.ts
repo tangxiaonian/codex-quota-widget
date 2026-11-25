@@ -7,7 +7,7 @@ import {
   currentMonitor,
   primaryMonitor,
 } from "@tauri-apps/api/window";
-import type { Preferences, WindowSize } from "../model";
+import { compactHeight, type Preferences, type WindowSize } from "../model";
 import { restoreFrame, fitSize, type WindowMode } from "./geometry";
 const native = "__TAURI_INTERNALS__" in window;
 
@@ -39,7 +39,7 @@ export async function restore(preferences: Preferences): Promise<void> {
   const fallback = (await primaryMonitor()) ?? monitors[0];
   if (!fallback) return;
   const size = preferences.compact
-    ? { width: 360, height: 104 }
+    ? { width: 360, height: compactHeight(preferences) }
     : (preferences.expandedSize ?? { width: 368, height: 524 });
   const frame = restoreFrame(preferences, size, monitors, fallback);
   const win = getCurrentWindow();
