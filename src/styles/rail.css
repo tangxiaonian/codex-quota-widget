@@ -305,6 +305,28 @@
   }
 }
 
+@keyframes rail-pop-out-left {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(10px) scale(0.96);
+  }
+}
+
+@keyframes rail-pop-out-right {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-10px) scale(0.96);
+  }
+}
+
 @keyframes rail-body-fade {
   from {
     opacity: 0;
@@ -332,32 +354,25 @@
   backdrop-filter: blur(28px) saturate(135%);
   -webkit-backdrop-filter: blur(28px) saturate(135%);
   will-change: transform, opacity;
-  transition:
-    opacity 0.14s cubic-bezier(0.4, 0, 1, 1),
-    transform 0.14s cubic-bezier(0.4, 0, 1, 1);
 }
 
 .rail-popover.from-left {
   transform-origin: right top;
-  animation: rail-pop-in-left 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rail-pop-in-left 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .rail-popover.from-right {
   transform-origin: left top;
-  animation: rail-pop-in-right 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rail-pop-in-right 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .rail-popover.from-left.closing {
-  animation: none;
-  opacity: 0;
-  transform: translateX(10px) scale(0.96);
+  animation: rail-pop-out-left 0.13s cubic-bezier(0.4, 0, 1, 1) forwards;
   pointer-events: none;
 }
 
 .rail-popover.from-right.closing {
-  animation: none;
-  opacity: 0;
-  transform: translateX(-10px) scale(0.96);
+  animation: rail-pop-out-right 0.13s cubic-bezier(0.4, 0, 1, 1) forwards;
   pointer-events: none;
 }
 

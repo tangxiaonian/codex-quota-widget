@@ -1,10 +1,14 @@
 use serde::Serialize;
 use serde_json::Value;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Mutex, OnceLock,
+};
 use tauri::{Emitter, LogicalSize, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 static RAIL_APP: OnceLock<tauri::AppHandle> = OnceLock::new();
 static RAIL_POPOVER_STATE: Mutex<Option<Value>> = Mutex::new(None);
+static RAIL_POPOVER_OPEN_ID: AtomicU64 = AtomicU64::new(0);
 const RAIL_POPOVER_LABEL: &str = "rail-popover";
 
 #[derive(Clone, Serialize)]
@@ -98,17 +102,23 @@ fn ensure_rail_popover_window(app: &tauri::AppHandle) -> Result<WebviewWindow, S
     Ok(popover)
 }
 
-/// Hide the dedicated rail-popover window whenever the rail closes, drags, or leaves rail mode.
+/// Hide the dedicated rail-popover window and clear its DOM state so the next open never flashes stale pixels.
 pub fn hide_rail_popover_window(app: &tauri::AppHandle) {
+    RAIL_POPOVER_OPEN_ID.fetch_add(1, Ordering::SeqCst);
+    if let Ok(mut slot) = RAIL_POPOVER_STATE.lock() {
+        *slot = None;
+    }
     if let Some(popover) = app.get_webview_window(RAIL_POPOVER_LABEL) {
         #[cfg(target_os = "macos")]
         if let Ok(pop_ptr) = popover.ns_window() {
             unsafe {
                 cq_hide_rail_popover(pop_ptr);
             }
+            let _ = app.emit_to(RAIL_POPOVER_LABEL, "rail-popover-clear", ());
             return;
         }
         let _ = popover.hide();
+        let _ = app.emit_to(RAIL_POPOVER_LABEL, "rail-popover-clear", ());
     }
 }
 
@@ -120,40 +130,77 @@ pub fn prewarm_rail_popover(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-/// Position, sync state, and reveal the separate hover popover without moving or resizing the main rail window.
+/// Position and push state to the separate popover window.
+/// When currently hidden, keeps the window off-screen until the WebView paints the new frame and calls `reveal_rail_popover`.
 pub fn show_rail_popover(
     app: tauri::AppHandle,
     x: i32,
     y: i32,
     width: f64,
     height: f64,
-    state: Value,
+    mut state: Value,
 ) -> Result<(), String> {
+    let popover = ensure_rail_popover_window(&app)?;
+    let visible = popover.is_visible().unwrap_or(false);
+    let open_id = RAIL_POPOVER_OPEN_ID.fetch_add(1, Ordering::SeqCst) + 1;
+    if let Some(obj) = state.as_object_mut() {
+        obj.insert("openId".into(), Value::from(open_id));
+    }
     if let Ok(mut slot) = RAIL_POPOVER_STATE.lock() {
         *slot = Some(state.clone());
     }
-    let popover = ensure_rail_popover_window(&app)?;
-    let _ = app.emit_to(RAIL_POPOVER_LABEL, "rail-popover-state", &state);
     let _ = popover.set_size(LogicalSize::new(width, height));
     let _ = popover.set_position(PhysicalPosition::new(x, y));
-    #[cfg(target_os = "macos")]
-    if let Ok(pop_ptr) = popover.ns_window() {
-        let main_ptr = app
-            .get_webview_window("main")
-            .and_then(|w| w.ns_window().ok())
-            .unwrap_or(std::ptr::null_mut());
-        unsafe {
-            cq_show_rail_popover(pop_ptr, main_ptr);
+    let _ = app.emit_to(RAIL_POPOVER_LABEL, "rail-popover-state", &state);
+    // If already visible (switching between sources), refresh window level without hiding or re-playing entrance.
+    if visible {
+        #[cfg(target_os = "macos")]
+        if let Ok(pop_ptr) = popover.ns_window() {
+            let main_ptr = app
+                .get_webview_window("main")
+                .and_then(|w| w.ns_window().ok())
+                .unwrap_or(std::ptr::null_mut());
+            unsafe {
+                cq_show_rail_popover(pop_ptr, main_ptr);
+            }
         }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+/// Reveal the hidden popover window only after its WebView has painted the matching `open_id` frame.
+pub fn reveal_rail_popover(app: tauri::AppHandle, open_id: u64) -> Result<(), String> {
+    if RAIL_POPOVER_OPEN_ID.load(Ordering::SeqCst) != open_id {
         return Ok(());
     }
-    let _ = popover.show();
+    if let Some(popover) = app.get_webview_window(RAIL_POPOVER_LABEL) {
+        if popover.is_visible().unwrap_or(false) {
+            return Ok(());
+        }
+        #[cfg(target_os = "macos")]
+        if let Ok(pop_ptr) = popover.ns_window() {
+            let main_ptr = app
+                .get_webview_window("main")
+                .and_then(|w| w.ns_window().ok())
+                .unwrap_or(std::ptr::null_mut());
+            unsafe {
+                cq_show_rail_popover(pop_ptr, main_ptr);
+            }
+            return Ok(());
+        }
+        let _ = popover.show();
+    }
     Ok(())
 }
 
 #[tauri::command]
 /// Push live quota/closing updates to an already visible popover window without touching window geometry.
-pub fn sync_rail_popover(app: tauri::AppHandle, state: Value) -> Result<(), String> {
+pub fn sync_rail_popover(app: tauri::AppHandle, mut state: Value) -> Result<(), String> {
+    let open_id = RAIL_POPOVER_OPEN_ID.load(Ordering::SeqCst);
+    if let Some(obj) = state.as_object_mut() {
+        obj.insert("openId".into(), Value::from(open_id));
+    }
     if let Ok(mut slot) = RAIL_POPOVER_STATE.lock() {
         *slot = Some(state.clone());
     }

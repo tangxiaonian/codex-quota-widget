@@ -23,6 +23,7 @@ import { MiniProgress } from "./MiniProgress";
 import { SourceBadge } from "./SourceBadge";
 
 export interface RailPopoverData {
+  openId?: number;
   source: SourceId;
   popoverSide: RailEdge;
   closing: boolean;

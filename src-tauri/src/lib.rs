@@ -379,6 +379,7 @@ pub fn run() {
             window::resize_window_anchored,
             window::prewarm_rail_popover,
             window::show_rail_popover,
+            window::reveal_rail_popover,
             window::sync_rail_popover,
             window::hide_rail_popover,
             window::get_rail_popover_state,

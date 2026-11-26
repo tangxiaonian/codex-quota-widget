@@ -108,6 +108,8 @@ export default function App() {
   const popoverSeqRef = useRef(0);
   const popoverShownKeyRef = useRef<string | null>(null);
   const popoverSideRef = useRef<RailEdge>("left");
+  const popoverOpeningRef = useRef(false);
+  const pendingPopoverSyncRef = useRef<RailPopoverData | null>(null);
   hoveredRailRef.current = hoveredRail;
   closingRailRef.current = closingRail;
 
@@ -153,6 +155,8 @@ export default function App() {
     clearTimeout(closeAnimTimer.current);
     pendingHoverRef.current = null;
     popoverShownKeyRef.current = null;
+    popoverOpeningRef.current = false;
+    pendingPopoverSyncRef.current = null;
     popoverSeqRef.current += 1;
     setClosingRail(false);
     setHoveredRail(null);
@@ -405,6 +409,8 @@ export default function App() {
     if (!hoveredRail) {
       if (popoverShownKeyRef.current !== null) {
         popoverShownKeyRef.current = null;
+        popoverOpeningRef.current = false;
+        pendingPopoverSyncRef.current = null;
         popoverSeqRef.current += 1;
         void bridge.hideRailPopover().catch(() => {});
       }
@@ -437,12 +443,19 @@ export default function App() {
 
     const layoutKey = `${hoveredRail}:${railHoverHeight}:${preferences.railEdge}`;
     if (popoverShownKeyRef.current === layoutKey) {
+      // Queue updates while the initial show/position call is still resolving its final side.
+      if (popoverOpeningRef.current) {
+        pendingPopoverSyncRef.current = payload;
+        return;
+      }
       void bridge.syncRailPopover(payload).catch(() => {});
       return;
     }
 
     const seq = ++popoverSeqRef.current;
     popoverShownKeyRef.current = layoutKey;
+    popoverOpeningRef.current = true;
+    pendingPopoverSyncRef.current = null;
     void bridge
       .showRailPopoverWindow(
         preferences.railEdge,
@@ -457,9 +470,20 @@ export default function App() {
           }
           return;
         }
+        popoverOpeningRef.current = false;
         popoverSideRef.current = side;
+        const queued = pendingPopoverSyncRef.current;
+        pendingPopoverSyncRef.current = null;
+        if (queued) {
+          void bridge
+            .syncRailPopover({ ...queued, popoverSide: side })
+            .catch(() => {});
+        }
       })
-      .catch((e) => w.setError(String(e)));
+      .catch((e) => {
+        if (popoverSeqRef.current === seq) popoverOpeningRef.current = false;
+        w.setError(String(e));
+      });
   }, [
     w.ready,
     useRail,

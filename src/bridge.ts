@@ -128,6 +128,15 @@ export async function onRailPopoverState(fn: (state: RailPopoverData) => void) {
     ? listen<RailPopoverData>("rail-popover-state", (e) => fn(e.payload))
     : () => {};
 }
+/** Subscribe to clear notifications emitted right after the rail-popover window hides. */
+export async function onRailPopoverClear(fn: () => void) {
+  return native ? listen("rail-popover-clear", () => fn()) : () => {};
+}
+/** Reveal the hidden rail-popover window once the WebView has committed the matching frame. */
+export async function revealRailPopover(openId: number): Promise<void> {
+  if (!native) return;
+  await invoke("reveal_rail_popover", { openId });
+}
 /** Send user actions clicked inside the dedicated rail-popover window back to the main window. */
 export async function emitRailPopoverAction(
   action: RailPopoverAction,
