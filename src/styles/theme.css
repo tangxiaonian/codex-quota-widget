@@ -1,0 +1,156 @@
+/* Dark frosted-glass theme tokens and shared pill/rail surface overrides. */
+:root[data-theme="dark"] {
+  color: #eaf4f8;
+  --ink: #eaf4f8;
+  --muted: #93acb8;
+  --teal: #2dd4bf;
+  --line: rgba(255, 255, 255, 0.14);
+  --glass: rgba(18, 28, 36, 0.72);
+}
+
+:root[data-theme="dark"] .card {
+  background: linear-gradient(
+    145deg,
+    rgba(26, 39, 49, 0.78),
+    rgba(16, 25, 33, 0.68) 55%,
+    rgba(14, 23, 31, 0.76)
+  );
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme="dark"] .card.opaque {
+  background: #17222b;
+}
+
+:root[data-theme="dark"] .card.quota-alert {
+  border-color: rgba(248, 113, 113, 0.65);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 0 1.5px rgba(248, 113, 113, 0.38),
+    0 0 20px rgba(239, 68, 68, 0.28);
+}
+
+:root[data-theme="dark"] .icon-button,
+:root[data-theme="dark"] .glass-button,
+:root[data-theme="dark"] .secondary-button,
+:root[data-theme="dark"] .segments button,
+:root[data-theme="dark"] .settings-view select,
+:root[data-theme="dark"] .custom-interval input {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .segments button.selected {
+  background: linear-gradient(120deg, #14b8a6, #0d9488);
+  border-color: transparent;
+  color: #ffffff;
+}
+
+:root[data-theme="dark"] .badge {
+  background: rgba(45, 212, 191, 0.16);
+  color: #5eead4;
+  border-color: rgba(45, 212, 191, 0.28);
+}
+
+:root[data-theme="dark"] .source-tabs,
+:root[data-theme="dark"] .credit-card,
+:root[data-theme="dark"] .antigravity-group,
+:root[data-theme="dark"] .points-package,
+:root[data-theme="dark"] .confirm-box {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+:root[data-theme="dark"] .mini-track,
+:root[data-theme="dark"] .mini-progress,
+:root[data-theme="dark"] .points-track {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+:root[data-theme="dark"] .mini-source-mark {
+  background: rgba(45, 212, 191, 0.16);
+  color: #5eead4;
+}
+
+:root[data-theme="dark"] .tick-inactive {
+  stroke: rgba(255, 255, 255, 0.16);
+}
+
+:root[data-theme="dark"] .status-banner,
+:root[data-theme="dark"] .notice {
+  background: rgba(15, 23, 30, 0.9);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #dbe8ef;
+}
+
+:root[data-theme="dark"] .low,
+:root[data-theme="dark"] .mini-quota.alert strong,
+:root[data-theme="dark"] .gauge.low .reading strong {
+  color: #f87171;
+}
+
+:root[data-theme="dark"] .demo-label {
+  background: rgba(15, 23, 30, 0.84);
+  color: #93acb8;
+}
+
+/* Custom pill cycler replaces native <select> inside the compact 104pt window. */
+.mini-view-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  max-width: 112px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.56);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+:root[data-theme="dark"] .mini-view-pill {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.mini-view-pill > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mini-view-dots {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.mini-view-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.28;
+}
+
+.mini-view-dots i.active {
+  opacity: 0.9;
+  background: var(--teal);
+}
+
+.burn-eta {
+  color: #d97706;
+  font-size: 10px;
+  font-weight: 560;
+}
+
+:root[data-theme="dark"] .burn-eta {
+  color: #fbbf24;
+}

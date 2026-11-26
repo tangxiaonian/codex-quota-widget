@@ -137,3 +137,9 @@ Snapshot 新增 packageError，明细请求失败时保留新汇总并显示提�
 - `native/antigravity_http.m`：使用独立进程级、禁用代理的临时 `NSURLSession` 向 `https://127.0.0.1:<port>` 发起只读 POST（`RetrieveUserQuotaSummary` 与 `GetUserStatus`），禁止重定向，自签名证书仅对 `127.0.0.1` 放行。仅提取额度窗口与 `planName`，不读取或回传个人邮箱；遇到多进程 401 时继续遍历其他候选进程与端口。
 - `antigravity/cli.rs`（兜底路线）：桌面端未运行或未返回额度时，尝试定位本机 `agy`（含 `~/.gemini/bin/agy`），严格校验 `agy --version >= 1.1.11` 后执行 `agy --log-file /dev/null -p "/usage" --output-format json`（防旧版把 `/usage` 当作模型输入消耗额度）。
 - `useAntigravity` 管理该来源的刷新与内存快照；Antigravity 桌面端启停事件同时触发一次刷新并参与窗口跟随。迷你总览仅在三个来源均启用时增加到 128pt，来源切换可以调整高度，普通额度刷新不改变窗口尺寸。
+
+## 三阶段升级架构（2026-11-25）
+
+- **外观、防截屏与纯图标菜单栏**：菜单栏默认清空标题仅保留图标；`workspace.m` 新增 `cq_set_hide_from_capture`（`NSWindowSharingNone`）、`cq_set_window_appearance` 与 `cq_set_window_chrome`（圆环条模式隐藏窗口级矩形 `NSVisualEffectView` 与矩形阴影），配合前端 `useTheme` / `theme.css` 实现浅色/暗黑磨砂玻璃自适应；`MiniViewPicker` 改为自定义胶囊循环切换器，不再使用原生 `<select>`。
+- **自由拖动圆环条（Rail）、无焦点悬停与原子缩放**：`WindowMode` 扩展 `rail`（56pt 宽，优先展示 5h 额度）、`railHover`（按剩余空间向内侧展开至 372pt，动态垂直补偿 `railOffsetY` 避免撞 Dock 时圆环上跳）、`railSliver`（空闲 14pt 热区 + 6pt 微光细条）；支持桌面任意拖动、距左右边缘 ≤28pt 自动吸附。原生层通过零定时器的 `cq_set_rail_pointer_monitor` 支持非焦点悬停，通过 `cq_resize_window_anchored` 单帧原子更新位置与尺寸消除闪烁；`useTodayUsage` 后台节流增量读取今日 Token 展示在悬停卡中；`src/burnRate.ts` 在预计耗尽早于 `resetsAt` 时提示见底时间。
+- **独立控制中心与本地 Token 统计**：`window::open_dashboard` 按需创建 `dashboard` 标准窗口（关闭即销毁释放 WebView 内存），通过 `preferences-updated` 事件与 `main` 悬浮窗双向同步。`src-tauri/src/usage/` 纯本地只读增量解析 Codex（`~/.codex` 累计差分）、WorkBuddy（`~/.workbuddy*` JSONL 优先防多通道叠加）与 Antigravity（`~/.gemini/antigravity*/conversations/*.db` 安全 Protobuf wire 解码，标 `is_partial`），采用锁外解析 + 单事务批量写入缓存于 SQLite v2。

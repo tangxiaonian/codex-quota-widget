@@ -6,6 +6,7 @@ mod provider;
 mod rpc;
 mod storage;
 mod subscription;
+mod usage;
 mod window;
 mod workbuddy;
 use model::{Preferences, Snapshot};
@@ -29,6 +30,7 @@ static REDUCED: AtomicBool = AtomicBool::new(false);
 struct State {
     storage: Mutex<storage::Storage>,
     busy: AtomicBool,
+    tray_title: Mutex<String>,
 }
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -98,7 +100,7 @@ fn bootstrap(state: tauri::State<State>) -> Result<Bootstrap, String> {
 }
 #[tauri::command]
 /// Save UI preferences only. OS autostart is handled separately by the explicit settings toggle.
-/// Tray visibility applies immediately; the card's settings view stays reachable to undo it.
+/// Tray visibility, capture exclusion and native vibrancy apply immediately.
 fn save_preferences(
     state: tauri::State<State>,
     app: tauri::AppHandle,
@@ -107,11 +109,54 @@ fn save_preferences(
     let db = state.storage.lock().map_err(|_| "本地存储不可用")?;
     let previous = db.preferences()?;
     db.save_preferences(&preferences)?;
+    drop(db);
     if previous.show_tray_icon != preferences.show_tray_icon {
         if let Some(tray) = app.tray_by_id("main-tray") {
             tray.set_visible(preferences.show_tray_icon)
                 .map_err(|_| "更新菜单栏图标失败")?;
         }
+    }
+    if previous.tray_title_mode != preferences.tray_title_mode
+        && preferences.tray_title_mode == "none"
+    {
+        if let Ok(mut cached) = state.tray_title.lock() {
+            *cached = String::new();
+        }
+        if let Some(tray) = app.tray_by_id("main-tray") {
+            let _ = tray.set_title(Some(""));
+        }
+    }
+    if previous.hide_from_capture != preferences.hide_from_capture
+        || previous.theme != preferences.theme
+    {
+        window::apply_main_window_flags(&app, preferences.hide_from_capture, &preferences.theme);
+    }
+    let _ = app.emit("preferences-updated", &preferences);
+    Ok(())
+}
+
+#[tauri::command]
+/// Update the macOS menu-bar title beside the tray icon with deduplication.
+fn set_tray_title(
+    state: tauri::State<State>,
+    app: tauri::AppHandle,
+    title: Option<String>,
+) -> Result<(), String> {
+    let sanitized: String = title
+        .unwrap_or_default()
+        .replace(['\r', '\n'], " ")
+        .trim()
+        .chars()
+        .take(36)
+        .collect();
+    let mut cached = state.tray_title.lock().map_err(|_| "菜单栏状态不可用")?;
+    if *cached == sanitized {
+        return Ok(());
+    }
+    *cached = sanitized.clone();
+    drop(cached);
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        let _ = tray.set_title(Some(sanitized.as_str()));
     }
     Ok(())
 }
@@ -154,6 +199,40 @@ async fn refresh_antigravity() -> Result<antigravity::Snapshot, String> {
         .await
         .map_err(|_| "Antigravity 查询任务异常".to_owned())?
 }
+#[tauri::command]
+/// Open or focus the separate usage/settings dashboard window.
+fn open_dashboard(app: tauri::AppHandle, tab: Option<String>) -> Result<(), String> {
+    window::open_dashboard(&app, tab.as_deref().unwrap_or("usage"))
+}
+
+#[tauri::command]
+/// Scan local Codex/WorkBuddy/Antigravity records off the event loop and outside the DB mutex.
+async fn scan_usage_report(
+    app: tauri::AppHandle,
+    days: Option<u32>,
+) -> Result<usage::UsageReport, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<State>();
+        let existing = state
+            .storage
+            .lock()
+            .map_err(|_| "本地存储不可用")?
+            .usage_file_states()?;
+        let batch = usage::parse_changed_files(&existing);
+        let mut db = state.storage.lock().map_err(|_| "本地存储不可用")?;
+        usage::commit_and_report(&mut db, batch, days)
+    })
+    .await
+    .map_err(|_| "本地用量统计任务异常".to_owned())?
+}
+
+#[tauri::command]
+/// Remove cached local usage rollups without touching preferences or Codex snapshots.
+fn clear_usage_cache(state: tauri::State<State>) -> Result<(), String> {
+    let mut db = state.storage.lock().map_err(|_| "本地存储不可用")?;
+    db.clear_usage_cache()
+}
+
 #[tauri::command]
 /// Fetch live read-only data off the event loop, then atomically cache the safe view model.
 async fn refresh_snapshot(app: tauri::AppHandle) -> Result<Snapshot, String> {
@@ -205,6 +284,11 @@ fn tray_image() -> tauri::image::Image<'static> {
 }
 /// Install menu, native lifecycle observation and the narrow application command surface.
 pub fn run() {
+    // Ignore SIGPIPE so an exiting child helper (such as codex app-server) never terminates the widget.
+    #[cfg(unix)]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_IGN);
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             window::show_card(app);
@@ -222,10 +306,13 @@ pub fn run() {
                 .unwrap_or(app.path().app_data_dir()?)
                 .join("widget.sqlite3");
             let storage = storage::Storage::open(&path)?;
-            let show_tray = storage.preferences()?.show_tray_icon;
+            let prefs = storage.preferences()?;
+            let show_tray = prefs.show_tray_icon;
+            window::apply_main_window_flags(app.handle(), prefs.hide_from_capture, &prefs.theme);
             app.manage(State {
                 storage: Mutex::new(storage),
                 busy: AtomicBool::new(false),
+                tray_title: Mutex::new(String::new()),
             });
             let _ = APP.set(app.handle().clone());
             #[cfg(target_os = "macos")]
@@ -235,9 +322,10 @@ pub fn run() {
             let show = MenuItem::with_id(app, "show", "显示卡片", true, None::<&str>)?;
             let hide = MenuItem::with_id(app, "hide", "隐藏卡片", true, None::<&str>)?;
             let refresh = MenuItem::with_id(app, "refresh", "刷新额度", true, None::<&str>)?;
+            let usage = MenuItem::with_id(app, "usage", "用量统计…", true, None::<&str>)?;
             let settings = MenuItem::with_id(app, "settings", "偏好设置…", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出额度卡片", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &hide, &refresh, &settings, &quit])?;
+            let menu = Menu::with_items(app, &[&show, &hide, &refresh, &usage, &settings, &quit])?;
             let tray = TrayIconBuilder::with_id("main-tray")
                 .icon(tray_image())
                 .icon_as_template(true)
@@ -253,9 +341,11 @@ pub fn run() {
                             "hide" => {
                                 window::hide_card(&w);
                             }
+                            "usage" => {
+                                let _ = window::open_dashboard(app, "usage");
+                            }
                             "settings" => {
-                                window::show_card(app);
-                                let _ = app.emit("menu-action", "settings");
+                                let _ = window::open_dashboard(app, "settings");
                             }
                             "refresh" => {
                                 let _ = app.emit("menu-action", "refresh");
@@ -267,11 +357,16 @@ pub fn run() {
                 })
                 .build(app)?;
             tray.set_visible(show_tray)?;
+            let _ = tray.set_title(Some(""));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             bootstrap,
             save_preferences,
+            set_tray_title,
+            open_dashboard,
+            scan_usage_report,
+            clear_usage_cache,
             subscription_active_until,
             refresh_snapshot,
             refresh_workbuddy,
@@ -279,7 +374,9 @@ pub fn run() {
             refresh_antigravity,
             consume_credit,
             window::arm_top_hide,
-            window::disarm_top_hide
+            window::disarm_top_hide,
+            window::set_window_chrome,
+            window::resize_window_anchored
         ])
         .run(tauri::generate_context!())
         .expect("无法启动额度卡片");

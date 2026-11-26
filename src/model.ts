@@ -31,6 +31,11 @@ export interface WindowSize {
   height: number;
 }
 export type SourceId = "codex" | "workbuddy" | "antigravity";
+export type ThemeMode = "system" | "light" | "dark";
+export type TrayTitleMode = "none" | "tightest" | "all";
+export type DesktopMode = "rail" | "mini" | "hidden";
+export type RailEdge = "left" | "right";
+export type CurrencyCode = "CNY" | "USD";
 export const sourceOptions = [
   { id: "codex", name: "Codex", enabled: "codexEnabled" },
   { id: "workbuddy", name: "WorkBuddy", enabled: "workbuddyEnabled" },
@@ -50,6 +55,14 @@ export interface Preferences {
   alwaysOnTop: boolean;
   followCodex: boolean;
   showTrayIcon: boolean;
+  theme: ThemeMode;
+  trayTitleMode: TrayTitleMode;
+  hideFromCapture: boolean;
+  desktopMode: DesktopMode;
+  railEdge: RailEdge;
+  railAutoCollapse: boolean;
+  currency: CurrencyCode;
+  usdToCny: number;
   x: number | null;
   y: number | null;
 }
@@ -80,6 +93,14 @@ export const defaults: Preferences = {
   alwaysOnTop: false,
   followCodex: true,
   showTrayIcon: true,
+  theme: "system",
+  trayTitleMode: "none",
+  hideFromCapture: false,
+  desktopMode: "rail",
+  railEdge: "right",
+  railAutoCollapse: false,
+  currency: "CNY",
+  usdToCny: 7.2,
   x: null,
   y: null,
 };

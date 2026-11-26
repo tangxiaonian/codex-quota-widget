@@ -98,9 +98,27 @@ export function useWidget() {
         await bridge.pin(b.preferences.alwaysOnTop);
         setReady(true);
         await bridge.show(
-          !b.preferences.followCodex ||
-            sourceRunning(b.lifecycle, b.preferences) ||
-            !!b.demo,
+          b.preferences.desktopMode !== "hidden" &&
+            (!b.preferences.followCodex ||
+              sourceRunning(b.lifecycle, b.preferences) ||
+              !!b.demo),
+        );
+        cleanup.push(
+          await bridge.onPreferencesUpdated((next) => {
+            const prev = prefsRef.current;
+            prefsRef.current = next;
+            setPreferences(next);
+            if (next.alwaysOnTop !== prev.alwaysOnTop) {
+              void bridge.pin(next.alwaysOnTop);
+            }
+            if (next.desktopMode !== prev.desktopMode) {
+              void bridge.show(
+                next.desktopMode !== "hidden" &&
+                  (!next.followCodex ||
+                    sourceRunning(lifeRef.current, next)),
+              );
+            }
+          }),
         );
         cleanup.push(
           await bridge.onLifecycle((state) => {
@@ -109,7 +127,9 @@ export function useWidget() {
             setLifecycle(state);
             if (prefsRef.current.followCodex && !settingsRef.current)
               void bridge.show(
-                sourceRunning(state, prefsRef.current) && !state.sleeping,
+                prefsRef.current.desktopMode !== "hidden" &&
+                  sourceRunning(state, prefsRef.current) &&
+                  !state.sleeping,
               );
             if (
               state.running &&
@@ -145,6 +165,10 @@ export function useWidget() {
   }, [ready, preferences.codexEnabled, refresh]);
   useEffect(() => {
     if (!ready) return;
+    if (preferences.desktopMode === "hidden" && !settings) {
+      void bridge.show(false);
+      return;
+    }
     if (preferences.followCodex && !settings)
       void bridge.show(
         sourceRunning(lifeRef.current, preferences) &&
@@ -156,6 +180,7 @@ export function useWidget() {
     preferences.workbuddyEnabled,
     preferences.antigravityEnabled,
     preferences.followCodex,
+    preferences.desktopMode,
     settings,
     refresh,
   ]);

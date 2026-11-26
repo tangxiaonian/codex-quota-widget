@@ -55,7 +55,14 @@ SQLite 文件位于 `~/Library/Application Support/local.codex.quota-widget/widg
 
 ## 关系与事务
 
-quota_window 和 reset_credit 的 account_key 外键关联 account_cache，ON DELETE CASCADE。应用启动时创建并复用 SQLite 连接，开启 `PRAGMA foreign_keys=ON`，schema 版本 `user_version=1`。
+quota_window 和 reset_credit 的 account_key 外键关联 account_cache，ON DELETE CASCADE。应用启动时创建并复用 SQLite 连接，开启 `PRAGMA foreign_keys=ON`，当前 schema 版本 `user_version=2`。
+
+### 本地 Token 用量增量缓存（schema v2，2026-11-25）
+
+从 v1 平滑迁移至 v2（保留全部既有设置与 Codex 快照），新增两张只读扫描缓存表：
+
+- `usage_file_state(path PRIMARY KEY, source, mtime, size, parsed_at)`：记录已索引本地日志文件的修改时间与大小，未变化文件直接跳过。
+- `usage_file_rollup(path REFERENCES usage_file_state ON DELETE CASCADE, day, source, model, input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, unclassified_tokens, is_partial)`：单文件级日汇总；文件变更或删除时通过外键级联原子替换，保证增量重算幂等无重复叠加。不保存对话正文、标题或工作目录。
 
 成功快照写入同一个事务：删除旧账户快照，插入新账户、窗口、卡片。设置表不受影响。失败回滚，不留下半份快照。
 

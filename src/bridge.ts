@@ -10,6 +10,7 @@ import {
   type Lifecycle,
 } from "./model";
 import type { AntigravitySnapshot } from "./antigravity";
+import { demoUsageReport, type UsageReport } from "./usageTypes";
 export const native = "__TAURI_INTERNALS__" in window;
 let sample = demoSnapshot();
 let demo = !native || new URLSearchParams(location.search).has("demo");
@@ -85,6 +86,55 @@ export async function save(preferences: Preferences): Promise<void> {
     return;
   }
   await invoke("save_preferences", { preferences });
+}
+/** Update the macOS menu-bar status title beside the tray icon. */
+export async function setTrayTitle(title: string): Promise<void> {
+  if (!native || demo) return;
+  await invoke("set_tray_title", { title });
+}
+/** Sync saved preferences across the floating card and the dashboard window. */
+export async function onPreferencesUpdated(
+  fn: (preferences: Preferences) => void,
+) {
+  return native
+    ? listen<Preferences>("preferences-updated", (e) => fn(e.payload))
+    : () => {};
+}
+/** Listen for native mouse coordinates over the floating rail even when the app is unfocused. */
+export async function onRailPointer(
+  fn: (event: { inside: boolean; x: number; y: number }) => void,
+) {
+  return native
+    ? listen<{ inside: boolean; x: number; y: number }>("rail-pointer", (e) =>
+        fn(e.payload),
+      )
+    : () => {};
+}
+/** Open or focus the separate dashboard window (usage analytics & settings). */
+export async function openDashboard(tab: "usage" | "settings"): Promise<void> {
+  if (!native) return;
+  await invoke("open_dashboard", { tab });
+}
+/** Listen for tab-switch instructions sent from the tray menu or floating rail. */
+export async function onDashboardTab(fn: (tab: "usage" | "settings") => void) {
+  return native
+    ? listen<string>("dashboard-tab", (e) =>
+        fn(e.payload === "settings" ? "settings" : "usage"),
+      )
+    : () => {};
+}
+/** Scan local Codex / WorkBuddy / Antigravity session files incrementally. */
+export async function scanUsageReport(
+  days: number | null,
+): Promise<UsageReport> {
+  return !native || demo
+    ? demoUsageReport(days)
+    : invoke<UsageReport>("scan_usage_report", { days });
+}
+/** Clear cached local usage rollups without touching preferences or snapshots. */
+export async function clearUsageCache(): Promise<void> {
+  if (!native || demo) return;
+  await invoke("clear_usage_cache");
 }
 /** Register a typed native lifecycle listener. */
 export async function onLifecycle(fn: (state: Lifecycle) => void) {

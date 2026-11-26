@@ -28,7 +28,15 @@ export function windowLabel(window: AntigravityWindow): string {
   return window.name;
 }
 
-/** Select a known measured quota, keeping its group and window together. */
+/** Hide Claude and GPT groups across all views so Antigravity focuses solely on Gemini quotas. */
+export function visibleGroups(groups: AntigravityGroup[]): AntigravityGroup[] {
+  return groups.filter((group) => !/\b(?:claude|gpt)\b/i.test(group.name));
+}
+
+/** Alias retained for callers expecting mini-layout filtering. */
+export const miniGroups = visibleGroups;
+
+/** Select the lowest measured quota among the given groups. */
 export function tightestQuota(groups: AntigravityGroup[]) {
   let result: {
     group: string;
@@ -48,9 +56,26 @@ export function tightestQuota(groups: AntigravityGroup[]) {
   return result;
 }
 
-/** Keep Claude and GPT groups out of both mini layouts without changing the snapshot. */
-export function miniGroups(groups: AntigravityGroup[]): AntigravityGroup[] {
-  return groups.filter((group) => !/\b(?:claude|gpt)\b/i.test(group.name));
+/** Prefer the 5-hour session window for the side rail; fall back to the tightest available window. */
+export function primaryQuota(groups: AntigravityGroup[]) {
+  const filtered = visibleGroups(groups);
+  let session: {
+    group: string;
+    window: AntigravityWindow;
+    remaining: number;
+  } | null = null;
+  for (const group of filtered) {
+    for (const window of group.windows) {
+      if (
+        window.kind === "session" &&
+        window.remaining != null &&
+        (!session || window.remaining < session.remaining)
+      ) {
+        session = { group: group.name, window, remaining: window.remaining };
+      }
+    }
+  }
+  return session ?? tightestQuota(filtered);
 }
 
 /** Abbreviate the standard Gemini group and retain names for new groups. */

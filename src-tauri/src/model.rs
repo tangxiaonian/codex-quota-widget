@@ -78,6 +78,22 @@ pub struct Preferences {
     /// Older stored payloads lack this field; it defaults to visible on read.
     #[serde(default = "default_true")]
     pub show_tray_icon: bool,
+    #[serde(default = "default_theme")]
+    pub theme: String,
+    #[serde(default = "default_tray_title_mode")]
+    pub tray_title_mode: String,
+    #[serde(default)]
+    pub hide_from_capture: bool,
+    #[serde(default = "default_desktop_mode")]
+    pub desktop_mode: String,
+    #[serde(default = "default_rail_edge")]
+    pub rail_edge: String,
+    #[serde(default)]
+    pub rail_auto_collapse: bool,
+    #[serde(default = "default_currency")]
+    pub currency: String,
+    #[serde(default = "default_usd_to_cny")]
+    pub usd_to_cny: f64,
     pub x: Option<i32>,
     pub y: Option<i32>,
 }
@@ -90,8 +106,26 @@ fn default_compact_view() -> String {
 fn default_true() -> bool {
     true
 }
+fn default_theme() -> String {
+    "system".into()
+}
+fn default_tray_title_mode() -> String {
+    "none".into()
+}
+fn default_desktop_mode() -> String {
+    "rail".into()
+}
+fn default_rail_edge() -> String {
+    "right".into()
+}
+fn default_currency() -> String {
+    "CNY".into()
+}
+fn default_usd_to_cny() -> f64 {
+    7.2
+}
 impl Default for Preferences {
-    /// New installs begin in the unobtrusive compact layout.
+    /// New installs begin in the unobtrusive side-rail layout with tray reading enabled.
     fn default() -> Self {
         Self {
             codex_enabled: true,
@@ -107,6 +141,14 @@ impl Default for Preferences {
             always_on_top: false,
             follow_codex: true,
             show_tray_icon: true,
+            theme: default_theme(),
+            tray_title_mode: default_tray_title_mode(),
+            hide_from_capture: false,
+            desktop_mode: default_desktop_mode(),
+            rail_edge: default_rail_edge(),
+            rail_auto_collapse: false,
+            currency: default_currency(),
+            usd_to_cny: default_usd_to_cny(),
             x: None,
             y: None,
         }
@@ -126,6 +168,24 @@ impl Preferences {
         };
         if !selected_enabled || !["all", "current"].contains(&self.compact_view.as_str()) {
             return Err("额度视图设置无效".into());
+        }
+        if !["system", "light", "dark"].contains(&self.theme.as_str()) {
+            return Err("主题设置无效".into());
+        }
+        if !["none", "tightest", "all"].contains(&self.tray_title_mode.as_str()) {
+            return Err("菜单栏读数模式无效".into());
+        }
+        if !["rail", "mini", "hidden"].contains(&self.desktop_mode.as_str()) {
+            return Err("桌面显示形态无效".into());
+        }
+        if !["left", "right"].contains(&self.rail_edge.as_str()) {
+            return Err("贴边方向设置无效".into());
+        }
+        if !["CNY", "USD"].contains(&self.currency.as_str()) {
+            return Err("币种设置无效".into());
+        }
+        if !self.usd_to_cny.is_finite() || self.usd_to_cny <= 0.0 || self.usd_to_cny > 100.0 {
+            return Err("汇率须为正数且不超过 100".into());
         }
         if let Some(size) = &self.expanded_size {
             if !size.width.is_finite()

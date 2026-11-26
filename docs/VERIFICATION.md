@@ -199,3 +199,12 @@ tray 图标实际隐藏的系统级效果（菜单栏区域视觉确认）受录
 - 本机真实只读测试 `antigravity::tests::live_local_or_cli_quota` 通过（耗时 0.32s），命中 `source=languageServer`、`plan=Some("Pro")`、`groups=2`，全程未触发钥匙串弹窗、未发起 OAuth 请求、未调用 Codex 重置卡消费接口。
 - `CARGO_NET_OFFLINE=true npm run desktop:build` 通过，生成本机 Release 应用包 `src-tauri/target/release/bundle/macos/Codex Quota Widget.app`（13.01 MiB，未做正式分发签名/公证）。
 - 未覆盖项：关闭 Antigravity 桌面端后的 `agy` CLI 真实兜底路径、原生应用重启后的窗口手工点击验收与多屏回归。
+
+### 2026-11-25 三阶段升级验收（菜单栏直显、贴边圆环条与本地 Token 用量统计）
+
+- **前端构建与单测**：`npm run build` 通过；`npm test` 21 项通过（新增 5 项覆盖菜单栏读数 `tightest`/`all`/`none` 与低余额 `!` 告警、Burn-rate ETA 预测与重置清空、贴边圆环条悬停内侧展开坐标钉死、`WindowController` 不把 Rail 尺寸覆盖 `expandedSize`、以及 Token/币种格式化）。
+- **Rust 单测与迁移**：`CARGO_NET_OFFLINE=true npm run test:rust` 22 项常规测试通过，含 SQLite `v1 -> v2` 平滑迁移且单文件增量重算幂等测试、Codex 累计差分与缓存拆分解析测试。
+- **本机真实本地日志扫描验证**（`usage::tests::live_local_usage_scan`，独立临时 SQLite，只读不上传、不改用户数据）：
+  - 成功扫描 2,117 个本地会话文件，覆盖全部 3 个来源（Codex 5.49 亿、WorkBuddy 6.07 亿、Antigravity 1.13 亿部分统计，近 30 天合计 12.69 亿 Token，等值 API 约 `$61.32`）；
+  - 随后已将逐文件事务优化为锁外解析 + 单事务批量写入。
+- **本机打包与实机迭代**：根据用户实机反馈完成五轮体验打磨（隐藏圆环条窗口级矩形底板、圆环优先展示 5h 额度、桌面任意拖动与 28pt 近边吸附、无焦点全局鼠标监测悬停、悬停卡直显今日 Token、底边 `railOffsetY` 零位移补偿、单帧原子 `setFrame` 防闪烁、菜单栏回归纯图标），最终 `npm run build`、21 项 TS 单测、22 项 Rust 单测及 `CARGO_NET_OFFLINE=true npm run desktop:build` 全部通过（13.36 MiB，未做正式分发签名/公证）；全程未触碰 Codex 重置卡消费接口。

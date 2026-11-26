@@ -1,6 +1,6 @@
 import {
   compactGroup,
-  miniGroups,
+  visibleGroups,
   windowLabel,
   type AntigravityWindow,
 } from "../antigravity";
@@ -69,7 +69,7 @@ export function AntigravityView({
     );
   }
   const groups = compact
-    ? miniGroups(state.snapshot.groups)
+    ? visibleGroups(state.snapshot.groups)
     : state.snapshot.groups;
   if (groups.length === 0) {
     return <p className="setting-help">暂无可显示额度</p>;

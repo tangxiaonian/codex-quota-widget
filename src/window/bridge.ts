@@ -7,29 +7,150 @@ import {
   currentMonitor,
   primaryMonitor,
 } from "@tauri-apps/api/window";
-import { compactHeight, type Preferences, type WindowSize } from "../model";
-import { restoreFrame, fitSize, type WindowMode } from "./geometry";
+import {
+  compactHeight,
+  sourceOptions,
+  type Preferences,
+  type RailEdge,
+  type WindowSize,
+} from "../model";
+import {
+  fitSize,
+  isRailMode,
+  RAIL_WIDTH,
+  railFrame,
+  railHeight,
+  railHoverFrame,
+  restoreFrame,
+  snapRailPosition,
+  type WindowMode,
+} from "./geometry";
+import type { RailHoverLayout } from "./controller";
+
 const native = "__TAURI_INTERNALS__" in window;
 
-/** Apply mode-specific constraints before resizing; the mini bar may be shorter than expanded minimums. */
+/** Toggle Tauri's rectangular window-level vibrancy & shadow (disabled in rail modes). */
+export async function setWindowChrome(rectangular: boolean): Promise<void> {
+  if (native) await invoke("set_window_chrome", { rectangular });
+}
+
+/** Atomically apply size, position and constraints in one AppKit transaction. */
+async function commitFrame(
+  currentPos: { x: number; y: number },
+  targetPos: { x: number; y: number },
+  size: WindowSize,
+  scale: number,
+  minWidth: number,
+  minHeight: number,
+  resizable: boolean,
+): Promise<void> {
+  await invoke("resize_window_anchored", {
+    deltaX: (targetPos.x - currentPos.x) / scale,
+    deltaTopY: (targetPos.y - currentPos.y) / scale,
+    width: size.width,
+    height: size.height,
+    minWidth,
+    minHeight,
+    resizable,
+  });
+}
+
+/** Apply mode-specific constraints before resizing; rail modes update frame atomically to avoid flicker. */
 export async function applyWindowMode(
   mode: WindowMode,
   preferred: WindowSize,
-): Promise<void> {
+  railEdge: RailEdge = "right",
+  railAnchor?: { x: number | null; y: number | null },
+  railBaseHeight?: number,
+): Promise<RailHoverLayout | void> {
   if (!native) return;
   const win = getCurrentWindow();
-  const monitor = await currentMonitor();
-  // Capture the anchor before AppKit resizes or changes the window style mask.
+  const monitors = await availableMonitors();
+  const monitor = (await currentMonitor()) ?? (await primaryMonitor()) ?? monitors[0];
   const position = await win.outerPosition();
   const size = fitSize(preferred, monitor);
-  await win.setMinSize(new LogicalSize(330, mode === "compact" ? 104 : 260));
-  await win.setSize(new LogicalSize(size.width, size.height));
-  await win.setResizable(mode !== "compact");
-  // Growing near a screen edge must keep settings and confirmation buttons reachable.
-  if (monitor) {
-    const frame = restoreFrame(position, size, [monitor], monitor);
-    await win.setPosition(new PhysicalPosition(frame.x, frame.y));
+  const rail = isRailMode(mode);
+
+  await setWindowChrome(!rail);
+
+  const minWidth = rail ? 12 : 330;
+  const minHeight = rail ? 48 : mode === "compact" ? 104 : 260;
+  const resizable = !rail && mode !== "compact";
+
+  if (!monitor) {
+    await win.setMinSize(new LogicalSize(minWidth, minHeight));
+    await win.setSize(new LogicalSize(size.width, size.height));
+    await win.setResizable(resizable);
+    return;
   }
+
+  const scale = monitor.scaleFactor || 1;
+  const list = monitors.length ? monitors : [monitor];
+
+  if (mode === "railHover") {
+    const anchor =
+      railAnchor && railAnchor.x != null && railAnchor.y != null
+        ? railAnchor
+        : position;
+    const hover = railHoverFrame(
+      anchor,
+      railEdge,
+      { width: RAIL_WIDTH, height: railBaseHeight ?? 150 },
+      size,
+      list,
+      monitor,
+    );
+    await commitFrame(position, hover, size, scale, minWidth, minHeight, false);
+    return { popoverSide: hover.popoverSide, railOffsetY: hover.railOffsetY };
+  }
+
+  if (mode === "rail") {
+    const frame =
+      railAnchor && railAnchor.x != null && railAnchor.y != null
+        ? restoreFrame(railAnchor, size, list, monitor)
+        : railFrame(railEdge, position, size, list, monitor, 4);
+    await commitFrame(position, frame, size, scale, minWidth, minHeight, false);
+    return;
+  }
+
+  if (mode === "railSliver") {
+    const frame = railFrame(
+      railEdge,
+      railAnchor ?? position,
+      size,
+      list,
+      monitor,
+      0,
+    );
+    await commitFrame(position, frame, size, scale, minWidth, minHeight, false);
+    return;
+  }
+
+  const frame = restoreFrame(position, size, [monitor], monitor);
+  await commitFrame(position, frame, size, scale, minWidth, minHeight, resizable);
+}
+
+/** Snap a freely dragged rail only when released close to the left or right display edge. */
+export async function snapRail(
+  position: { x: number; y: number },
+  size: WindowSize,
+): Promise<{ x: number; y: number; snappedEdge: RailEdge | null }> {
+  if (!native) return { x: position.x, y: position.y, snappedEdge: null };
+  const monitors = await availableMonitors();
+  const fallback = (await currentMonitor()) ?? (await primaryMonitor()) ?? monitors[0];
+  if (!fallback) return { x: position.x, y: position.y, snappedEdge: null };
+  const snapped = snapRailPosition(
+    position,
+    size,
+    monitors.length ? monitors : [fallback],
+    fallback,
+  );
+  if (snapped.x !== position.x || snapped.y !== position.y) {
+    await getCurrentWindow().setPosition(
+      new PhysicalPosition(snapped.x, snapped.y),
+    );
+  }
+  return snapped;
 }
 
 /** Restore to any connected display, including negative coordinates; clamp to its usable work area. */
@@ -38,11 +159,29 @@ export async function restore(preferences: Preferences): Promise<void> {
   const monitors = await availableMonitors();
   const fallback = (await primaryMonitor()) ?? monitors[0];
   if (!fallback) return;
+
+  const win = getCurrentWindow();
+  const enabledCount = sourceOptions.filter((s) => preferences[s.enabled]).length;
+  const useRail = preferences.compact && preferences.desktopMode === "rail";
+
+  await setWindowChrome(!useRail);
+
+  if (useRail) {
+    const size = { width: RAIL_WIDTH, height: railHeight(enabledCount) };
+    const frame =
+      preferences.x != null && preferences.y != null
+        ? restoreFrame(preferences, size, monitors, fallback)
+        : railFrame(preferences.railEdge, preferences, size, monitors, fallback, 4);
+    await win.setMinSize(new LogicalSize(12, 48));
+    await win.setSize(new LogicalSize(frame.width, frame.height));
+    await win.setPosition(new PhysicalPosition(frame.x, frame.y));
+    return;
+  }
+
   const size = preferences.compact
     ? { width: 360, height: compactHeight(preferences) }
     : (preferences.expandedSize ?? { width: 368, height: 524 });
   const frame = restoreFrame(preferences, size, monitors, fallback);
-  const win = getCurrentWindow();
   await win.setMinSize(new LogicalSize(330, preferences.compact ? 104 : 260));
   await win.setSize(new LogicalSize(frame.width, frame.height));
   await win.setPosition(new PhysicalPosition(frame.x, frame.y));
