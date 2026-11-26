@@ -1,20 +1,7 @@
-import {
-  BarChart3,
-  GripHorizontal,
-  Maximize2,
-  RefreshCw,
-  Settings2,
-} from "lucide-react";
-import {
-  compactGroup,
-  primaryQuota,
-  tightestQuota,
-  visibleGroups,
-  windowLabel,
-} from "../antigravity";
+import { BarChart3, GripHorizontal } from "lucide-react";
+import { primaryQuota, tightestQuota, visibleGroups } from "../antigravity";
 import * as bridge from "../bridge";
 import {
-  duration,
   remaining,
   sourceOptions,
   type Preferences,
@@ -23,18 +10,13 @@ import {
   type SourceId,
 } from "../model";
 import type { SourceState } from "../hooks/useSources";
-import { creditPercent, points } from "../workbuddy";
-import {
-  cacheHitRate,
-  formatCost,
-  formatTokens,
-  type UsageReport,
-} from "../usageTypes";
-import { MiniProgress } from "./MiniProgress";
+import { creditPercent } from "../workbuddy";
+import type { UsageReport } from "../usageTypes";
+import { RailHoverCard } from "./RailHoverCard";
+import { SourceBadge } from "./SourceBadge";
 
 interface RailRingProps {
   id: SourceId;
-  short: "C" | "W" | "A";
   name: string;
   pct: number | null;
   lowAlert: boolean;
@@ -44,10 +26,9 @@ interface RailRingProps {
   onClick: () => void;
 }
 
-/** Compact 40pt circular ring preferring 5-hour quota with centered typography and no native tooltip clutter. */
+/** Compact 44pt Apple Watch style horseshoe gauge with an unobstructed emblem and bottom readout. */
 function RailRing({
   id,
-  short,
   name,
   pct,
   lowAlert,
@@ -56,10 +37,15 @@ function RailRing({
   onHover,
   onClick,
 }: RailRingProps) {
-  const radius = 16.5;
+  const radius = 18.8;
   const circumference = 2 * Math.PI * radius;
+  const spanDeg = 280;
+  // Center the 80° bottom gap around 6 o'clock (90° in SVG coordinates) so the readout sits cleanly in the opening.
+  const startDeg = 90 + (360 - spanDeg) / 2;
+  const trackLength = (circumference * spanDeg) / 360;
   const clamped = pct == null ? 0 : Math.max(0, Math.min(100, pct));
-  const offset = circumference * (1 - clamped / 100);
+  const arcLength = trackLength * (clamped / 100);
+  const rounded = pct == null ? null : Math.round(clamped);
   const tone =
     pct == null
       ? "unknown"
@@ -74,315 +60,50 @@ function RailRing({
       type="button"
       data-rail-source={id}
       className={`rail-ring ${tone} ${active ? "active" : ""}`}
-      aria-label={`${name} ${pct == null ? "未读取" : `剩余 ${Math.round(clamped)}%`}`}
+      aria-label={`${name} ${rounded == null ? "未读取" : `剩余 ${rounded}%`}`}
       onMouseEnter={onHover}
       onFocus={onHover}
       onClick={onClick}
     >
-      <svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true">
-        <circle className="rail-track" cx="20" cy="20" r={radius} />
-        {pct != null && (
+      <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden="true">
+        <circle
+          className="rail-track"
+          cx="22"
+          cy="22"
+          r={radius}
+          strokeDasharray={`${trackLength} ${circumference}`}
+          transform={`rotate(${startDeg} 22 22)`}
+        />
+        {pct != null && clamped > 0 && (
           <circle
             className="rail-arc"
-            cx="20"
-            cy="20"
+            cx="22"
+            cy="22"
             r={radius}
-            strokeDasharray={circumference}
-            strokeDashoffset={offset}
-            transform="rotate(-90 20 20)"
+            strokeDasharray={`${arcLength} ${circumference}`}
+            transform={`rotate(${startDeg} 22 22)`}
           />
         )}
       </svg>
-      <span className="rail-center">
-        <strong className="rail-value">
-          {pct == null ? "—" : Math.round(clamped)}
-        </strong>
-        <span className="rail-tag">{short}</span>
+      <span className="rail-artwork" aria-hidden="true">
+        <SourceBadge source={id} className="rail-artwork-img" />
       </span>
+      <strong className={`rail-value ${rounded === 100 ? "full" : ""}`}>
+        {rounded == null ? "—" : rounded}
+      </strong>
       {error && <i className="rail-dot error" />}
       {lowAlert && <i className="rail-dot alert" />}
     </button>
   );
 }
 
-/** Hover detail card docked seamlessly beside the side rail rings. */
-function RailHoverCard({
-  source,
-  preferences,
-  codex,
-  sources,
-  todayUsage,
-  todayBusy,
-  now,
-  etaMap,
-  busy,
-  onRefresh,
-  onExpand,
-  onOpenDashboard,
-}: {
-  source: SourceId;
-  preferences: Preferences;
-  codex: Snapshot | null;
-  sources: SourceState;
-  todayUsage: UsageReport | null;
-  todayBusy: boolean;
-  now: number;
-  etaMap: Record<string, number | null>;
-  busy: boolean;
-  onRefresh: () => Promise<void>;
-  onExpand: (id: SourceId) => void;
-  onOpenDashboard: (tab: "usage" | "settings") => void;
-}) {
-  const wb = sources.workbuddy;
-  const ag = sources.antigravity;
-  const agGroups = ag.snapshot?.groups ?? [];
-  const todaySource =
-    todayUsage?.bySource.find((item) => item.source === source) ?? null;
-  const todayHit = todaySource
-    ? cacheHitRate(todaySource.inputTokens, todaySource.cacheReadTokens)
-    : null;
-  const todayCost =
-    todaySource && todaySource.estimatedUsd != null
-      ? formatCost(
-          todaySource.estimatedUsd,
-          preferences.currency,
-          preferences.usdToCny || 7.2,
-        )
-      : null;
-
-  return (
-    <section className="rail-popover" aria-label="额度详情">
-      <div className="rail-popover-head">
-        <div className="rail-popover-title">
-          <strong>
-            {source === "codex"
-              ? "Codex"
-              : source === "workbuddy"
-                ? "WorkBuddy"
-                : "Antigravity"}
-          </strong>
-          <small>
-            {source === "codex"
-              ? (codex?.account.email ?? "等待账号")
-              : source === "workbuddy"
-                ? (wb.snapshot?.plan ?? wb.snapshot?.name ?? "当前账号")
-                : ag.snapshot
-                  ? `${ag.snapshot.plan ? `${ag.snapshot.plan} · ` : ""}${ag.snapshot.source === "cli" ? "agy CLI" : "桌面端"}`
-                  : "未读取"}
-          </small>
-        </div>
-        <div className="rail-popover-actions">
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="刷新额度"
-            title="刷新额度"
-            disabled={busy}
-            onClick={() => void onRefresh()}
-          >
-            <RefreshCw size={14} className={busy ? "loading" : ""} />
-          </button>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="展开完整卡片"
-            title="展开完整卡片"
-            onClick={() => onExpand(source)}
-          >
-            <Maximize2 size={14} />
-          </button>
-        </div>
-      </div>
-
-      {source === "codex" && (
-        <div className="rail-popover-body">
-          {[
-            { minutes: 300, label: "5 小时额度", key: "codex:300" },
-            { minutes: 10080, label: "周额度", key: "codex:10080" },
-          ].map(({ minutes, label, key }) => {
-            const win = codex?.windows.find((w) => w.minutes === minutes);
-            const pct = remaining(win);
-            const eta = etaMap[key];
-            return (
-              <div className="rail-row" key={minutes}>
-                <div className="rail-row-meta">
-                  <span>{label}</span>
-                  <strong className={pct != null && pct <= 10 ? "low" : ""}>
-                    {pct == null ? "未提供" : `${Math.round(pct)}%`}
-                  </strong>
-                </div>
-                <MiniProgress
-                  value={pct}
-                  label={label}
-                  secondary={minutes === 10080}
-                />
-                <div className="rail-row-sub">
-                  <span>
-                    {win?.resetsAt != null
-                      ? `${duration(win.resetsAt, now)}后恢复`
-                      : "恢复时间未提供"}
-                  </span>
-                  {eta != null && (
-                    <span className="burn-eta">
-                      约 {duration(eta, now)}后见底
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-          {codex?.availableCount != null && codex.availableCount > 0 && (
-            <button
-              type="button"
-              className="rail-credit-link"
-              onClick={() => onExpand("codex")}
-            >
-              可用重置卡 {codex.availableCount} 张 · 展开查看与使用
-            </button>
-          )}
-          {sources.codexStatus && (
-            <p className="rail-error">{sources.codexStatus}</p>
-          )}
-        </div>
-      )}
-
-      {source === "workbuddy" && (
-        <div className="rail-popover-body">
-          {wb.snapshot ? (
-            <div className="rail-row">
-              <div className="rail-row-meta">
-                <span>剩余积分</span>
-                <strong>
-                  {points(wb.snapshot.remaining)}
-                  {wb.snapshot.total != null
-                    ? ` / ${points(wb.snapshot.total)}`
-                    : ""}
-                </strong>
-              </div>
-              <MiniProgress
-                value={creditPercent(wb.snapshot.remaining, wb.snapshot.total)}
-                label="WorkBuddy 积分"
-              />
-              <div className="rail-row-sub">
-                <span>有效积分包 {wb.snapshot.packages.length} 个</span>
-                <button
-                  type="button"
-                  className="rail-inline-btn"
-                  onClick={() => onExpand("workbuddy")}
-                >
-                  查看明细
-                </button>
-              </div>
-            </div>
-          ) : (
-            <p className="rail-empty">
-              {wb.error ?? "等待读取 WorkBuddy 积分"}
-            </p>
-          )}
-        </div>
-      )}
-
-      {source === "antigravity" && (
-        <div className="rail-popover-body">
-          {ag.snapshot && agGroups.length > 0 ? (
-            agGroups.map((group) => (
-              <div className="rail-ag-group" key={group.name}>
-                <h4>{compactGroup(group.name)}</h4>
-                {group.windows.map((win) => {
-                  const eta = etaMap[`ag:${group.name}:${win.id}`];
-                  return (
-                    <div className="rail-row" key={win.id}>
-                      <div className="rail-row-meta">
-                        <span>{windowLabel(win)}额度</span>
-                        <strong
-                          className={
-                            win.remaining != null && win.remaining <= 10
-                              ? "low"
-                              : ""
-                          }
-                        >
-                          {win.remaining == null
-                            ? "—"
-                            : `${Math.round(win.remaining)}%`}
-                        </strong>
-                      </div>
-                      <MiniProgress
-                        value={win.remaining}
-                        label={`${group.name} ${windowLabel(win)}`}
-                        secondary={win.kind === "weekly"}
-                      />
-                      <div className="rail-row-sub">
-                        <span>
-                          {win.resetsAt != null
-                            ? `${duration(win.resetsAt, now)}后恢复`
-                            : "恢复时间未提供"}
-                        </span>
-                        {eta != null && (
-                          <span className="burn-eta">
-                            约 {duration(eta, now)}后见底
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))
-          ) : (
-            <p className="rail-empty">
-              {ag.error ?? "等待读取 Gemini 额度"}
-            </p>
-          )}
-        </div>
-      )}
-
-      <button
-        type="button"
-        className="rail-today-usage"
-        onClick={() => onOpenDashboard("usage")}
-        title="点击打开完整 Token 用量统计"
-      >
-        <span className="rail-today-label">今日 Token</span>
-        <span className="rail-today-val">
-          {todaySource ? (
-            <>
-              <strong>{formatTokens(todaySource.totalTokens)}</strong>
-              {todayHit != null && <small>缓存 {Math.round(todayHit)}%</small>}
-              {todayCost && <small>{todayCost}</small>}
-            </>
-          ) : todayBusy && !todayUsage ? (
-            <small>扫描中…</small>
-          ) : (
-            <small>今日暂无记录</small>
-          )}
-        </span>
-      </button>
-
-      <div className="rail-popover-foot">
-        <button
-          type="button"
-          className="rail-foot-btn"
-          onClick={() => onOpenDashboard("usage")}
-        >
-          <BarChart3 size={12} /> Token 用量
-        </button>
-        <button
-          type="button"
-          className="rail-foot-btn"
-          onClick={() => onOpenDashboard("settings")}
-        >
-          <Settings2 size={12} /> 偏好设置
-        </button>
-      </div>
-    </section>
-  );
-}
-
-/** Freely draggable vertical side rail with near-edge snapping, sliver collapse, and inward hover popover. */
+/** Freely draggable vertical side rail with near-edge snapping, sliver collapse, and hover popover. */
 export function RailView({
   preferences,
   popoverSide,
   railOffsetY,
+  closing,
+  inlinePopover = true,
   codex,
   sources,
   todayUsage,
@@ -404,6 +125,8 @@ export function RailView({
   preferences: Preferences;
   popoverSide: RailEdge;
   railOffsetY: number;
+  closing: boolean;
+  inlinePopover?: boolean;
   codex: Snapshot | null;
   sources: SourceState;
   todayUsage: UsageReport | null;
@@ -479,7 +202,7 @@ export function RailView({
     <aside
       className={`rail-strip ${reduceTransparency ? "opaque" : ""} ${anyLow ? "alert" : ""}`}
       style={
-        railOffsetY > 0
+        inlinePopover && railOffsetY > 0
           ? { marginTop: `${railOffsetY}px` }
           : undefined
       }
@@ -508,13 +231,6 @@ export function RailView({
             <RailRing
               key={source.id}
               id={source.id}
-              short={
-                source.id === "codex"
-                  ? "C"
-                  : source.id === "workbuddy"
-                    ? "W"
-                    : "A"
-              }
               name={source.name}
               pct={pct}
               lowAlert={low}
@@ -538,27 +254,40 @@ export function RailView({
     </aside>
   );
 
-  const popover = hovered ? (
-    <RailHoverCard
-      source={hovered}
-      preferences={preferences}
-      codex={codex}
-      sources={sources}
-      todayUsage={todayUsage}
-      todayBusy={todayBusy}
-      now={now}
-      etaMap={etaMap}
-      busy={busy}
-      onRefresh={onRefresh}
-      onExpand={onExpand}
-      onOpenDashboard={onOpenDashboard}
-    />
-  ) : null;
+  const popover =
+    inlinePopover && hovered ? (
+      <RailHoverCard
+        source={hovered}
+        popoverSide={popoverSide}
+        closing={closing}
+        theme={preferences.theme}
+        currency={preferences.currency}
+        usdToCny={preferences.usdToCny}
+        codex={codex}
+        codexStatus={sources.codexStatus}
+        workbuddy={{
+          snapshot: sources.workbuddy.snapshot,
+          error: sources.workbuddy.error,
+        }}
+        antigravity={{
+          snapshot: sources.antigravity.snapshot,
+          error: sources.antigravity.error,
+        }}
+        todayUsage={todayUsage}
+        todayBusy={todayBusy}
+        now={now}
+        etaMap={etaMap}
+        busy={busy}
+        onRefresh={onRefresh}
+        onExpand={onExpand}
+        onOpenDashboard={onOpenDashboard}
+      />
+    ) : null;
 
   return (
     <main
-      className={`rail-root side-${popoverSide} ${hovered ? "with-popover" : ""}`}
-      onMouseLeave={onLeave}
+      className={`rail-root side-${popoverSide} ${popover ? "with-popover" : ""}`}
+      onMouseLeave={inlinePopover ? onLeave : undefined}
     >
       {popoverSide === "left" ? (
         <>

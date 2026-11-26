@@ -2,7 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Clock3, RefreshCw, X } from "lucide-react";
 import * as bridge from "./bridge";
 import { appendSample, estimateDepletion, type QuotaSample } from "./burnRate";
-import { remaining, type RailEdge, type SourceId } from "./model";
+import {
+  remaining,
+  soonestUsableCredit,
+  sourceOptions,
+  type RailEdge,
+  type SourceId,
+} from "./model";
 import { useWidget } from "./useWidget";
 import { useSources } from "./hooks/useSources";
 import { useTheme } from "./hooks/useTheme";
@@ -16,7 +22,8 @@ import { CreditConfirmation } from "./components/CreditConfirmation";
 import { ResizeEdges } from "./components/ResizeEdges";
 import { SourceContent } from "./components/SourceContent";
 import { RailView } from "./components/RailView";
-import type { WindowMode } from "./window/geometry";
+import type { RailPopoverData } from "./components/RailHoverCard";
+import { railHeight, type WindowMode } from "./window/geometry";
 
 /** Compose floating views (side rail / mini bar / expanded card) and native window coordination. */
 export default function App() {
@@ -81,8 +88,9 @@ export default function App() {
     void bridge.setTrayTitle("").catch(() => {});
   }, [w.ready]);
 
-  // Rail hover, dynamic popover side & vertical offset compensation.
+  // Rail hover, dynamic popover side, close transition & separate native popover coordination.
   const [hoveredRail, setHoveredRail] = useState<SourceId | null>(null);
+  const [closingRail, setClosingRail] = useState(false);
   const [railLayout, setRailLayout] = useState<{
     popoverSide: RailEdge;
     railOffsetY: number;
@@ -90,15 +98,76 @@ export default function App() {
   const [sliver, setSliver] = useState(false);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const closeAnimTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const collapseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const dragCooldownTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const draggingRef = useRef(false);
+  const hoveredRailRef = useRef<SourceId | null>(null);
+  const closingRailRef = useRef(false);
+  const pendingHoverRef = useRef<SourceId | null>(null);
+  const popoverSeqRef = useRef(0);
+  const popoverShownKeyRef = useRef<string | null>(null);
+  const popoverSideRef = useRef<RailEdge>("left");
+  hoveredRailRef.current = hoveredRail;
+  closingRailRef.current = closingRail;
+
+  const openRailSource = (id: SourceId, delayMs: number) => {
+    clearTimeout(leaveTimer.current);
+    clearTimeout(closeAnimTimer.current);
+    clearTimeout(collapseTimer.current);
+    if (closingRailRef.current) {
+      setClosingRail(false);
+    }
+    setSliver(false);
+    // Avoid restarting the hover timer on every 1px mousemove while already open or queued for the same source.
+    if (hoveredRailRef.current === id || pendingHoverRef.current === id) {
+      return;
+    }
+    clearTimeout(hoverTimer.current);
+    pendingHoverRef.current = id;
+    hoverTimer.current = setTimeout(() => {
+      pendingHoverRef.current = null;
+      setClosingRail(false);
+      setHoveredRail(id);
+    }, delayMs);
+  };
+
+  const scheduleRailClose = (delayMs: number) => {
+    clearTimeout(hoverTimer.current);
+    pendingHoverRef.current = null;
+    if (!hoveredRailRef.current) return;
+    clearTimeout(leaveTimer.current);
+    leaveTimer.current = setTimeout(() => {
+      setClosingRail(true);
+      clearTimeout(closeAnimTimer.current);
+      closeAnimTimer.current = setTimeout(() => {
+        setHoveredRail(null);
+        setClosingRail(false);
+      }, 145);
+    }, delayMs);
+  };
+
+  const closeRailImmediately = () => {
+    clearTimeout(hoverTimer.current);
+    clearTimeout(leaveTimer.current);
+    clearTimeout(closeAnimTimer.current);
+    pendingHoverRef.current = null;
+    popoverShownKeyRef.current = null;
+    popoverSeqRef.current += 1;
+    setClosingRail(false);
+    setHoveredRail(null);
+    if (bridge.native) {
+      void bridge.hideRailPopover().catch(() => {});
+    }
+  };
 
   const suppressHoverDuringDrag = () => {
     draggingRef.current = true;
     clearTimeout(hoverTimer.current);
     clearTimeout(leaveTimer.current);
+    clearTimeout(closeAnimTimer.current);
     clearTimeout(dragCooldownTimer.current);
+    pendingHoverRef.current = null;
     dragCooldownTimer.current = setTimeout(() => {
       draggingRef.current = false;
     }, 360);
@@ -107,6 +176,8 @@ export default function App() {
   const compact = preferences.compact && !w.settings && !selection;
   const useRail = compact && preferences.desktopMode === "rail";
   const todayUsage = useTodayUsage(w.ready && useRail, w.lifecycle.sleeping);
+  const enabledRailCount = sourceOptions.filter((s) => preferences[s.enabled]).length;
+  const railBaseHeight = railHeight(enabledRailCount);
 
   useEffect(() => {
     if (hoveredRail) {
@@ -115,35 +186,53 @@ export default function App() {
   }, [hoveredRail, todayUsage.refresh]);
 
   useEffect(() => {
+    const side: RailEdge = preferences.railEdge === "left" ? "right" : "left";
+    popoverSideRef.current = side;
     setRailLayout((prev) => ({
       ...prev,
-      popoverSide: preferences.railEdge === "left" ? "right" : "left",
+      popoverSide: side,
     }));
   }, [preferences.railEdge]);
 
-  // Unfocused hover support: native macOS pointer monitor hits rings even while another app holds focus.
+  // Pre-create the hidden native popover window when entering rail mode, and hide it on exit.
+  useEffect(() => {
+    if (!bridge.native || !w.ready) return;
+    if (useRail) {
+      void bridge.prewarmRailPopover().catch(() => {});
+      return;
+    }
+    popoverShownKeyRef.current = null;
+    popoverSeqRef.current += 1;
+    void bridge.hideRailPopover().catch(() => {});
+  }, [w.ready, useRail]);
+
+  // Unfocused hover support: native macOS pointer monitor tracks both the stationary rail and separate popover window.
   useEffect(() => {
     if (!useRail) return;
     let disposed = false;
     let stop: (() => void) | undefined;
     void bridge
-      .onRailPointer(({ inside, x, y }) => {
+      .onRailPointer(({ inside, target, x, y }) => {
         if (draggingRef.current) return;
-        if (!inside) {
-          clearTimeout(hoverTimer.current);
-          clearTimeout(leaveTimer.current);
-          leaveTimer.current = setTimeout(() => setHoveredRail(null), 260);
+        if (!inside || target === "none") {
+          scheduleRailClose(220);
           return;
         }
         clearTimeout(leaveTimer.current);
+        clearTimeout(closeAnimTimer.current);
         clearTimeout(collapseTimer.current);
+        if (closingRailRef.current) {
+          setClosingRail(false);
+        }
         setSliver(false);
+        if (target === "popover") {
+          return;
+        }
         const el = document.elementFromPoint(x, y);
         const ring = el?.closest<HTMLElement>("[data-rail-source]");
         const id = ring?.dataset.railSource as SourceId | undefined;
         if (id) {
-          clearTimeout(hoverTimer.current);
-          hoverTimer.current = setTimeout(() => setHoveredRail(id), 80);
+          openRailSource(id, 70);
         }
       })
       .then((unlisten) => {
@@ -179,27 +268,34 @@ export default function App() {
     }
   }, [useRail]);
 
-  // Size the hover popover tightly to content so bottom-area hovers avoid unnecessary upward shifts.
+  // Size the hover popover with 22pt vertical shadow breathing room so drop shadows never clip.
   const railHoverHeight = useMemo(() => {
-    if (hoveredRail === "workbuddy") return 228;
+    if (hoveredRail === "workbuddy") return 252;
     if (hoveredRail === "codex") {
-      return snapshot?.availableCount && snapshot.availableCount > 0 ? 308 : 272;
+      const hasNextCredit = snapshot
+        ? soonestUsableCredit(snapshot.credits, now) != null
+        : false;
+      const hasCredits =
+        (snapshot?.availableCount != null && snapshot.availableCount > 0) ||
+        hasNextCredit;
+      return hasCredits ? (hasNextCredit ? 360 : 336) : 296;
     }
     if (hoveredRail === "antigravity") {
       const groups = antigravity.snapshot?.groups ?? [];
-      if (groups.length === 0) return 228;
+      if (groups.length === 0) return 252;
       const winCount = groups.reduce((sum, g) => sum + g.windows.length, 0);
-      return Math.min(460, Math.max(276, 146 + groups.length * 24 + winCount * 47));
+      return Math.min(484, Math.max(300, 168 + groups.length * 24 + winCount * 47));
     }
-    return 272;
-  }, [hoveredRail, snapshot?.availableCount, antigravity.snapshot]);
+    return 296;
+  }, [hoveredRail, snapshot, now, antigravity.snapshot]);
 
+  // Native rail hover renders inside a dedicated popover window, so the main rail strip never resizes or flickers.
   const mode: WindowMode = w.settings
     ? "settings"
     : selection
       ? "confirmation"
       : useRail
-        ? hoveredRail
+        ? !bridge.native && hoveredRail
           ? "railHover"
           : sliver
             ? "railSliver"
@@ -232,7 +328,7 @@ export default function App() {
   useEffect(() => {
     const listener = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setHoveredRail(null);
+        closeRailImmediately();
         back();
       }
     };
@@ -241,7 +337,7 @@ export default function App() {
   }, [redeeming]);
 
   function openDashboardOrInline(tab: "usage" | "settings") {
-    setHoveredRail(null);
+    closeRailImmediately();
     if (bridge.native && !w.demo) {
       void bridge.openDashboard(tab).catch((e) => w.setError(String(e)));
     } else {
@@ -256,12 +352,146 @@ export default function App() {
       ? w.busy || wb.busy || antigravity.busy
       : activeSource.busy;
 
+  const popoverActionsRef = useRef({
+    refresh: async () => {
+      await Promise.all([refreshAll(), todayUsage.refresh(true)]);
+    },
+    expand: (id: SourceId) => {
+      closeRailImmediately();
+      void w.update({ selectedSource: id, compact: false });
+    },
+    openDashboard: openDashboardOrInline,
+    close: closeRailImmediately,
+  });
+  popoverActionsRef.current = {
+    refresh: async () => {
+      await Promise.all([refreshAll(), todayUsage.refresh(true)]);
+    },
+    expand: (id: SourceId) => {
+      closeRailImmediately();
+      void w.update({ selectedSource: id, compact: false });
+    },
+    openDashboard: openDashboardOrInline,
+    close: closeRailImmediately,
+  };
+
+  // Receive button actions clicked inside the separate native rail-popover window.
+  useEffect(() => {
+    if (!bridge.native || !useRail) return;
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    void bridge
+      .onRailPopoverAction((action) => {
+        if (action.type === "refresh") void popoverActionsRef.current.refresh();
+        else if (action.type === "expand") popoverActionsRef.current.expand(action.source);
+        else if (action.type === "openDashboard")
+          popoverActionsRef.current.openDashboard(action.tab);
+        else if (action.type === "close") popoverActionsRef.current.close();
+      })
+      .then((unlisten) => {
+        if (disposed) unlisten();
+        else stop = unlisten;
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, [useRail]);
+
+  // Synchronize the separate native rail-popover window whenever hover source, layout or live data changes.
+  useEffect(() => {
+    if (!bridge.native || !w.ready || !useRail) return;
+    if (!hoveredRail) {
+      if (popoverShownKeyRef.current !== null) {
+        popoverShownKeyRef.current = null;
+        popoverSeqRef.current += 1;
+        void bridge.hideRailPopover().catch(() => {});
+      }
+      return;
+    }
+
+    const payload: RailPopoverData = {
+      source: hoveredRail,
+      popoverSide: popoverSideRef.current,
+      closing: closingRail,
+      theme: preferences.theme,
+      currency: preferences.currency,
+      usdToCny: preferences.usdToCny,
+      codex: snapshot,
+      codexStatus: sources.codexStatus,
+      workbuddy: {
+        snapshot: wb.snapshot,
+        error: wb.error,
+      },
+      antigravity: {
+        snapshot: antigravity.snapshot,
+        error: antigravity.error,
+      },
+      todayUsage: todayUsage.report,
+      todayBusy: todayUsage.busy,
+      now,
+      etaMap,
+      busy: visibleBusy,
+    };
+
+    const layoutKey = `${hoveredRail}:${railHoverHeight}:${preferences.railEdge}`;
+    if (popoverShownKeyRef.current === layoutKey) {
+      void bridge.syncRailPopover(payload).catch(() => {});
+      return;
+    }
+
+    const seq = ++popoverSeqRef.current;
+    popoverShownKeyRef.current = layoutKey;
+    void bridge
+      .showRailPopoverWindow(
+        preferences.railEdge,
+        railBaseHeight,
+        railHoverHeight,
+        payload,
+      )
+      .then((side) => {
+        if (popoverSeqRef.current !== seq) {
+          if (!hoveredRailRef.current) {
+            void bridge.hideRailPopover().catch(() => {});
+          }
+          return;
+        }
+        popoverSideRef.current = side;
+      })
+      .catch((e) => w.setError(String(e)));
+  }, [
+    w.ready,
+    useRail,
+    hoveredRail,
+    closingRail,
+    railHoverHeight,
+    railBaseHeight,
+    preferences.railEdge,
+    preferences.theme,
+    preferences.currency,
+    preferences.usdToCny,
+    snapshot,
+    sources.codexStatus,
+    wb.snapshot,
+    wb.error,
+    antigravity.snapshot,
+    antigravity.error,
+    todayUsage.report,
+    todayUsage.busy,
+    now,
+    etaMap,
+    visibleBusy,
+  ]);
+
   if (useRail) {
     return (
       <RailView
         preferences={preferences}
         popoverSide={railLayout.popoverSide}
         railOffsetY={railLayout.railOffsetY}
+        closing={closingRail}
+        inlinePopover={!bridge.native}
         codex={snapshot}
         sources={sources}
         todayUsage={todayUsage.report}
@@ -274,30 +504,24 @@ export default function App() {
         reduceTransparency={w.lifecycle.reduceTransparency}
         onHover={(id) => {
           if (draggingRef.current) return;
-          clearTimeout(leaveTimer.current);
-          clearTimeout(hoverTimer.current);
-          setSliver(false);
-          hoverTimer.current = setTimeout(() => setHoveredRail(id), 100);
+          openRailSource(id, 80);
         }}
         onWake={() => {
           clearTimeout(collapseTimer.current);
           setSliver(false);
         }}
         onLeave={() => {
-          clearTimeout(hoverTimer.current);
-          leaveTimer.current = setTimeout(() => setHoveredRail(null), 280);
+          scheduleRailClose(220);
         }}
         onDragStart={() => {
           suppressHoverDuringDrag();
-          setHoveredRail(null);
+          closeRailImmediately();
         }}
         onRefresh={async () => {
           await Promise.all([refreshAll(), todayUsage.refresh(true)]);
         }}
         onExpand={(id) => {
-          clearTimeout(hoverTimer.current);
-          clearTimeout(leaveTimer.current);
-          setHoveredRail(null);
+          closeRailImmediately();
           void w.update({ selectedSource: id, compact: false });
         }}
         onOpenDashboard={openDashboardOrInline}

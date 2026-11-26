@@ -10,6 +10,10 @@ import {
   type Lifecycle,
 } from "./model";
 import type { AntigravitySnapshot } from "./antigravity";
+import type {
+  RailPopoverAction,
+  RailPopoverData,
+} from "./components/RailHoverCard";
 import { demoUsageReport, type UsageReport } from "./usageTypes";
 export const native = "__TAURI_INTERNALS__" in window;
 let sample = demoSnapshot();
@@ -100,14 +104,43 @@ export async function onPreferencesUpdated(
     ? listen<Preferences>("preferences-updated", (e) => fn(e.payload))
     : () => {};
 }
-/** Listen for native mouse coordinates over the floating rail even when the app is unfocused. */
-export async function onRailPointer(
-  fn: (event: { inside: boolean; x: number; y: number }) => void,
+export interface RailPointerEvent {
+  inside: boolean;
+  target: "rail" | "popover" | "none";
+  x: number;
+  y: number;
+}
+
+/** Listen for native mouse coordinates over the floating rail and popover windows even when unfocused. */
+export async function onRailPointer(fn: (event: RailPointerEvent) => void) {
+  return native
+    ? listen<RailPointerEvent>("rail-pointer", (e) => fn(e.payload))
+    : () => {};
+}
+/** Read the cached popover payload when the dedicated rail-popover WebView mounts. */
+export async function getRailPopoverState(): Promise<RailPopoverData | null> {
+  if (!native) return null;
+  return invoke<RailPopoverData | null>("get_rail_popover_state");
+}
+/** Subscribe to live state pushes inside the dedicated rail-popover window. */
+export async function onRailPopoverState(fn: (state: RailPopoverData) => void) {
+  return native
+    ? listen<RailPopoverData>("rail-popover-state", (e) => fn(e.payload))
+    : () => {};
+}
+/** Send user actions clicked inside the dedicated rail-popover window back to the main window. */
+export async function emitRailPopoverAction(
+  action: RailPopoverAction,
+): Promise<void> {
+  if (!native) return;
+  await invoke("rail_popover_action", { action });
+}
+/** Handle actions forwarded from the dedicated rail-popover window in the main window. */
+export async function onRailPopoverAction(
+  fn: (action: RailPopoverAction) => void,
 ) {
   return native
-    ? listen<{ inside: boolean; x: number; y: number }>("rail-pointer", (e) =>
-        fn(e.payload),
-      )
+    ? listen<RailPopoverAction>("rail-popover-action", (e) => fn(e.payload))
     : () => {};
 }
 /** Open or focus the separate dashboard window (usage analytics & settings). */

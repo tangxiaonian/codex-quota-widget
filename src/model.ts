@@ -157,6 +157,13 @@ export function sortedCredits(credits: Credit[]): Credit[] {
       a.id.localeCompare(b.id),
   );
 }
+/** Pick the earliest-expiring redeemable reset credit, ignoring expired or unavailable cards. */
+export function soonestUsableCredit(
+  credits: Credit[],
+  now: number,
+): Credit | null {
+  return sortedCredits(credits).find((credit) => canUse(credit, now)) ?? null;
+}
 /** Render the complete date in the user's system timezone. */
 export function expiryDate(time: number | null): string {
   return time == null

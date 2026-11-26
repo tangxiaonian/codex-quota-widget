@@ -17,21 +17,82 @@ import {
 import {
   fitSize,
   isRailMode,
+  RAIL_POPOVER_WINDOW_WIDTH,
   RAIL_WIDTH,
   railFrame,
   railHeight,
   railHoverFrame,
+  railPopoverFrame,
   restoreFrame,
   snapRailPosition,
   type WindowMode,
 } from "./geometry";
 import type { RailHoverLayout } from "./controller";
+import type { RailPopoverData } from "../components/RailHoverCard";
 
 const native = "__TAURI_INTERNALS__" in window;
+let lastChromeRectangular: boolean | null = null;
 
-/** Toggle Tauri's rectangular window-level vibrancy & shadow (disabled in rail modes). */
+/** Toggle Tauri's rectangular window-level vibrancy & shadow (disabled in rail modes), skipping redundant native resets. */
 export async function setWindowChrome(rectangular: boolean): Promise<void> {
-  if (native) await invoke("set_window_chrome", { rectangular });
+  if (!native || lastChromeRectangular === rectangular) return;
+  lastChromeRectangular = rectangular;
+  await invoke("set_window_chrome", { rectangular });
+}
+
+/** Pre-create the hidden popover WebView so the first hover opens without cold-start delay. */
+export async function prewarmRailPopover(): Promise<void> {
+  if (native) await invoke("prewarm_rail_popover");
+}
+
+/** Position and show the dedicated rail-popover window beside the stationary rail strip. */
+export async function showRailPopoverWindow(
+  preferredEdge: RailEdge,
+  railHeightPx: number,
+  popoverHeightPx: number,
+  state: RailPopoverData,
+): Promise<RailEdge> {
+  if (!native) return state.popoverSide;
+  const win = getCurrentWindow();
+  const monitors = await availableMonitors();
+  const monitor =
+    (await currentMonitor()) ?? (await primaryMonitor()) ?? monitors[0];
+  const position = await win.outerPosition();
+  if (!monitor) {
+    await invoke("sync_rail_popover", { state });
+    return state.popoverSide;
+  }
+  const list = monitors.length ? monitors : [monitor];
+  const frame = railPopoverFrame(
+    position,
+    preferredEdge,
+    { width: RAIL_WIDTH, height: railHeightPx },
+    { width: RAIL_POPOVER_WINDOW_WIDTH, height: popoverHeightPx },
+    list,
+    monitor,
+  );
+  const nextState: RailPopoverData = {
+    ...state,
+    popoverSide: frame.popoverSide,
+  };
+  await invoke("show_rail_popover", {
+    x: frame.x,
+    y: frame.y,
+    width: frame.width,
+    height: frame.height,
+    state: nextState,
+  });
+  return frame.popoverSide;
+}
+
+/** Push state updates (live refresh or close fade) to the separate popover window without moving it. */
+export async function syncRailPopover(state: RailPopoverData): Promise<void> {
+  if (native) await invoke("sync_rail_popover", { state });
+}
+
+/** Hide the separate rail-popover window without touching the main rail strip window. */
+export async function hideRailPopover(): Promise<void> {
+  if (native) await invoke("hide_rail_popover");
 }
 
 /** Atomically apply size, position and constraints in one AppKit transaction. */
@@ -108,7 +169,7 @@ export async function applyWindowMode(
     const frame =
       railAnchor && railAnchor.x != null && railAnchor.y != null
         ? restoreFrame(railAnchor, size, list, monitor)
-        : railFrame(railEdge, position, size, list, monitor, 4);
+        : railFrame(railEdge, position, size, list, monitor, 0);
     await commitFrame(position, frame, size, scale, minWidth, minHeight, false);
     return;
   }
@@ -171,7 +232,7 @@ export async function restore(preferences: Preferences): Promise<void> {
     const frame =
       preferences.x != null && preferences.y != null
         ? restoreFrame(preferences, size, monitors, fallback)
-        : railFrame(preferences.railEdge, preferences, size, monitors, fallback, 4);
+        : railFrame(preferences.railEdge, preferences, size, monitors, fallback, 0);
     await win.setMinSize(new LogicalSize(12, 48));
     await win.setSize(new LogicalSize(frame.width, frame.height));
     await win.setPosition(new PhysicalPosition(frame.x, frame.y));
@@ -193,6 +254,7 @@ export async function show(visible: boolean): Promise<void> {
   if (visible) await getCurrentWindow().show();
   else {
     await disarmTopHide();
+    await hideRailPopover();
     await getCurrentWindow().hide();
   }
 }

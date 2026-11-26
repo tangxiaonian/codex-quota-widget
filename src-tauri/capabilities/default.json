@@ -1,6 +1,6 @@
 {
   "identifier": "main",
-  "windows": ["main", "dashboard"],
+  "windows": ["main", "dashboard", "rail-popover"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

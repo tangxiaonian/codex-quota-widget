@@ -376,7 +376,13 @@ pub fn run() {
             window::arm_top_hide,
             window::disarm_top_hide,
             window::set_window_chrome,
-            window::resize_window_anchored
+            window::resize_window_anchored,
+            window::prewarm_rail_popover,
+            window::show_rail_popover,
+            window::sync_rail_popover,
+            window::hide_rail_popover,
+            window::get_rail_popover_state,
+            window::rail_popover_action
         ])
         .run(tauri::generate_context!())
         .expect("无法启动额度卡片");

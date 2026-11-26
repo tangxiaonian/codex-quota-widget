@@ -6,8 +6,9 @@ static NSMutableArray *observers;
 static id railGlobalMonitor;
 static id railLocalMonitor;
 static __weak NSWindow *railTrackedWindow;
-static void (*railPointerCallback)(bool, double, double);
-static bool railLastInside = false;
+static __weak NSWindow *railPopoverWindow;
+static void (*railPointerCallback)(int, double, double);
+static int railLastTarget = 0;
 /// Read the actual Codex bundle identity; its display name may be ChatGPT.
 bool cq_codex_running(void) {
     return [NSRunningApplication runningApplicationsWithBundleIdentifier:@"com.openai.codex"].count > 0;
@@ -78,39 +79,49 @@ void cq_set_window_appearance(void *pointer, int mode) {
     });
 }
 
-/// Evaluate global pointer location against the rail window without stealing focus.
+/// Evaluate global pointer location against the rail and popover windows without stealing focus.
+/// Target codes: 0 = outside both, 1 = inside rail strip, 2 = inside visible popover window.
 static void handleRailPointer(void) {
     NSWindow *window = railTrackedWindow;
     if (!window || !railPointerCallback) return;
     if (NSEvent.pressedMouseButtons != 0) return;
     if (!window.isVisible) {
-        if (railLastInside) {
-            railLastInside = false;
-            railPointerCallback(false, 0, 0);
+        if (railLastTarget != 0) {
+            railLastTarget = 0;
+            railPointerCallback(0, 0, 0);
         }
         return;
     }
     NSPoint mouse = NSEvent.mouseLocation;
-    NSRect frame = window.frame;
-    BOOL inside = NSPointInRect(mouse, NSInsetRect(frame, -4, -4));
-    if (inside) {
-        railLastInside = true;
-        double x = mouse.x - frame.origin.x;
-        double y = NSMaxY(frame) - mouse.y;
-        railPointerCallback(true, x, y);
-    } else if (railLastInside) {
-        railLastInside = false;
-        railPointerCallback(false, 0, 0);
+    NSRect railFrame = window.frame;
+    BOOL inRail = NSPointInRect(mouse, NSInsetRect(railFrame, -2, -2));
+    if (inRail) {
+        railLastTarget = 1;
+        double x = mouse.x - railFrame.origin.x;
+        double y = NSMaxY(railFrame) - mouse.y;
+        railPointerCallback(1, x, y);
+        return;
+    }
+    NSWindow *popover = railPopoverWindow;
+    BOOL inPopover = popover && popover.isVisible && NSPointInRect(mouse, NSInsetRect(popover.frame, -2, -2));
+    if (inPopover) {
+        railLastTarget = 2;
+        railPointerCallback(2, 0, 0);
+        return;
+    }
+    if (railLastTarget != 0) {
+        railLastTarget = 0;
+        railPointerCallback(0, 0, 0);
     }
 }
 
 /// Start or stop zero-timer mouse tracking for the floating rail so hover works while unfocused.
-void cq_set_rail_pointer_monitor(void *pointer, bool enabled, void (*callback)(bool, double, double)) {
+void cq_set_rail_pointer_monitor(void *pointer, bool enabled, void (*callback)(int, double, double)) {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (enabled && pointer && callback) {
             NSWindow *window = (__bridge NSWindow *)pointer;
             window.acceptsMouseMovedEvents = YES;
-            // Keep existing monitors and inside-state intact across rail <-> railHover resizes.
+            // Keep existing monitors and target state intact across rail updates.
             if (railGlobalMonitor && railTrackedWindow == window) {
                 railPointerCallback = callback;
                 return;
@@ -125,7 +136,7 @@ void cq_set_rail_pointer_monitor(void *pointer, bool enabled, void (*callback)(b
             }
             railTrackedWindow = window;
             railPointerCallback = callback;
-            railLastInside = NSPointInRect(NSEvent.mouseLocation, NSInsetRect(window.frame, -4, -4));
+            railLastTarget = NSPointInRect(NSEvent.mouseLocation, NSInsetRect(window.frame, -2, -2)) ? 1 : 0;
             railGlobalMonitor = [NSEvent addGlobalMonitorForEventsMatchingMask:NSEventMaskMouseMoved
                                                                        handler:^(__unused NSEvent *event) {
                 handleRailPointer();
@@ -145,7 +156,7 @@ void cq_set_rail_pointer_monitor(void *pointer, bool enabled, void (*callback)(b
             [NSEvent removeMonitor:railLocalMonitor];
             railLocalMonitor = nil;
         }
-        railLastInside = false;
+        railLastTarget = 0;
         railTrackedWindow = nil;
         railPointerCallback = NULL;
     });
@@ -163,7 +174,10 @@ void cq_resize_window_anchored(void *pointer, double deltaX, double deltaTopY, d
         } else {
             mask &= ~NSWindowStyleMaskResizable;
         }
-        window.styleMask = mask;
+        // Avoid redundant styleMask writes that force AppKit to revalidate window backing chrome.
+        if (mask != window.styleMask) {
+            window.styleMask = mask;
+        }
         NSRect cur = window.frame;
         CGFloat newTop = NSMaxY(cur) - deltaTopY;
         CGFloat newBottom = newTop - height;
@@ -178,6 +192,16 @@ void cq_resize_window_anchored(void *pointer, double deltaX, double deltaTopY, d
     }
 }
 
+/// Recursively toggle every NSVisualEffectView inside a view hierarchy.
+static void setVisualEffectsHidden(NSView *view, BOOL hidden) {
+    if ([view isKindOfClass:NSVisualEffectView.class]) {
+        view.hidden = hidden;
+    }
+    for (NSView *sub in view.subviews) {
+        setVisualEffectsHidden(sub, hidden);
+    }
+}
+
 /// Toggle Tauri's rectangular window-level NSVisualEffectView and drop shadow.
 /// Rail modes render independent rounded cards on a fully transparent canvas without rectangular chrome.
 void cq_set_window_chrome(void *pointer, bool rectangular) {
@@ -188,11 +212,81 @@ void cq_set_window_chrome(void *pointer, bool rectangular) {
         window.backgroundColor = NSColor.clearColor;
         window.hasShadow = rectangular;
         NSView *content = window.contentView;
-        for (NSView *sub in content.subviews) {
-            if ([sub isKindOfClass:NSVisualEffectView.class]) {
-                sub.hidden = !rectangular;
+        if (content) {
+            setVisualEffectsHidden(content, !rectangular);
+            if (!rectangular && content.layer) {
+                content.layer.backgroundColor = NSColor.clearColor.CGColor;
             }
         }
         [window invalidateShadow];
     });
+}
+
+/// Configure the dedicated rail-popover window as a transparent borderless overlay tracked by the pointer monitor.
+void cq_configure_rail_popover(void *popoverPtr, void *mainPtr) {
+    if (!popoverPtr) return;
+    NSWindow *popover = (__bridge NSWindow *)popoverPtr;
+    NSWindow *mainWin = mainPtr ? (__bridge NSWindow *)mainPtr : nil;
+    void (^apply)(void) = ^{
+        railPopoverWindow = popover;
+        popover.opaque = NO;
+        popover.backgroundColor = NSColor.clearColor;
+        popover.hasShadow = NO;
+        popover.acceptsMouseMovedEvents = YES;
+        if (mainWin) {
+            popover.level = mainWin.level;
+            popover.collectionBehavior = mainWin.collectionBehavior;
+            popover.sharingType = mainWin.sharingType;
+            popover.appearance = mainWin.appearance;
+        }
+        NSView *content = popover.contentView;
+        if (content) {
+            setVisualEffectsHidden(content, YES);
+            if (content.layer) {
+                content.layer.backgroundColor = NSColor.clearColor.CGColor;
+            }
+        }
+        [popover invalidateShadow];
+    };
+    if ([NSThread isMainThread]) {
+        apply();
+    } else {
+        dispatch_sync(dispatch_get_main_queue(), apply);
+    }
+}
+
+/// Show the dedicated rail-popover window without stealing focus or activating the application.
+void cq_show_rail_popover(void *popoverPtr, void *mainPtr) {
+    if (!popoverPtr) return;
+    NSWindow *popover = (__bridge NSWindow *)popoverPtr;
+    NSWindow *mainWin = mainPtr ? (__bridge NSWindow *)mainPtr : nil;
+    void (^apply)(void) = ^{
+        railPopoverWindow = popover;
+        if (mainWin) {
+            popover.level = mainWin.level;
+            popover.collectionBehavior = mainWin.collectionBehavior;
+            popover.sharingType = mainWin.sharingType;
+            popover.appearance = mainWin.appearance;
+        }
+        [popover orderFrontRegardless];
+    };
+    if ([NSThread isMainThread]) {
+        apply();
+    } else {
+        dispatch_sync(dispatch_get_main_queue(), apply);
+    }
+}
+
+/// Hide the dedicated rail-popover window without affecting the main rail strip window.
+void cq_hide_rail_popover(void *popoverPtr) {
+    if (!popoverPtr) return;
+    NSWindow *popover = (__bridge NSWindow *)popoverPtr;
+    void (^apply)(void) = ^{
+        [popover orderOut:nil];
+    };
+    if ([NSThread isMainThread]) {
+        apply();
+    } else {
+        dispatch_sync(dispatch_get_main_queue(), apply);
+    }
 }

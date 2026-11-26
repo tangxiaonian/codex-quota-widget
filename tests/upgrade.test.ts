@@ -1,13 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { defaults, demoSnapshot } from "../src/model.ts";
+import { defaults, demoSnapshot, soonestUsableCredit } from "../src/model.ts";
 import { formatTrayTitle } from "../src/trayTitle.ts";
 import { appendSample, estimateDepletion } from "../src/burnRate.ts";
 import {
   RAIL_HOVER_WIDTH,
+  RAIL_POPOVER_WINDOW_OVERLAP,
+  RAIL_POPOVER_WINDOW_WIDTH,
   RAIL_WIDTH,
   railFrame,
   railHoverFrame,
+  railPopoverFrame,
   snapRailPosition,
   type Display,
 } from "../src/window/geometry.ts";
@@ -83,7 +86,7 @@ test("rail drags freely anywhere on desktop and only snaps near screen edges", (
 
   // Dropped within 28pt of left edge -> snaps cleanly to left edge.
   const nearLeft = snapRailPosition({ x: 30, y: 400 }, size, [display], display);
-  assert.equal(nearLeft.x, 8);
+  assert.equal(nearLeft.x, 0);
   assert.equal(nearLeft.snappedEdge, "left");
 
   // Hovering from a mid-screen position keeps the rail stationary while expanding the popover.
@@ -117,6 +120,39 @@ test("rail drags freely anywhere on desktop and only snaps near screen edges", (
     bottomHover.y + bottomHover.railOffsetY * display.scaleFactor,
     lowAnchorY,
   );
+
+  // Separate native popover window opens adjacent with 10pt shadow overlap and clamps vertically on its own.
+  const rightRailX = 2880 - RAIL_WIDTH * display.scaleFactor;
+  const popLeft = railPopoverFrame(
+    { x: rightRailX, y: lowAnchorY },
+    "right",
+    size,
+    { width: RAIL_POPOVER_WINDOW_WIDTH, height: 390 },
+    [display],
+    display,
+  );
+  assert.equal(popLeft.popoverSide, "left");
+  assert.equal(
+    popLeft.x,
+    rightRailX - (RAIL_POPOVER_WINDOW_WIDTH - RAIL_POPOVER_WINDOW_OVERLAP) * display.scaleFactor,
+  );
+  assert.ok(popLeft.y < lowAnchorY);
+  assert.equal(popLeft.y + popLeft.height * display.scaleFactor, 1750);
+
+  const popRight = railPopoverFrame(
+    { x: 0, y: 400 },
+    "left",
+    size,
+    { width: RAIL_POPOVER_WINDOW_WIDTH, height: 296 },
+    [display],
+    display,
+  );
+  assert.equal(popRight.popoverSide, "right");
+  assert.equal(
+    popRight.x,
+    (RAIL_WIDTH - RAIL_POPOVER_WINDOW_OVERLAP) * display.scaleFactor,
+  );
+  assert.equal(popRight.y, 400);
 
   // Primary Antigravity ring prefers 5h session over weekly.
   const primary = primaryQuota([
@@ -169,4 +205,60 @@ test("usage formatting preserves unpriced status and zero-denominator cache rate
   assert.equal(formatCost(2, "USD", 7.2), "$2.00");
   assert.equal(cacheHitRate(0, 0), null);
   assert.equal(cacheHitRate(250, 750), 75);
+});
+
+test("soonestUsableCredit selects earliest unexpired available card and leaves undated last", () => {
+  const now = 10_000;
+  const picked = soonestUsableCredit(
+    [
+      {
+        id: "expired",
+        status: "available",
+        title: "Expired",
+        description: null,
+        resetType: null,
+        expiresAt: now - 60,
+        grantedAt: null,
+      },
+      {
+        id: "used",
+        status: "redeemed",
+        title: "Used",
+        description: null,
+        resetType: null,
+        expiresAt: now + 60,
+        grantedAt: null,
+      },
+      {
+        id: "undated",
+        status: "available",
+        title: "Undated",
+        description: null,
+        resetType: null,
+        expiresAt: null,
+        grantedAt: null,
+      },
+      {
+        id: "later",
+        status: "available",
+        title: "Later",
+        description: null,
+        resetType: null,
+        expiresAt: now + 7200,
+        grantedAt: null,
+      },
+      {
+        id: "soonest",
+        status: "available",
+        title: "Full reset (Weekly + 5 hr)",
+        description: null,
+        resetType: null,
+        expiresAt: now + 1800,
+        grantedAt: null,
+      },
+    ],
+    now,
+  );
+  assert.equal(picked?.id, "soonest");
+  assert.equal(soonestUsableCredit([], now), null);
 });

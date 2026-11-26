@@ -15,9 +15,13 @@ export interface Display {
   scaleFactor: number;
 }
 
-export const RAIL_WIDTH = 56;
-export const RAIL_POPOVER_WIDTH = 308;
-export const RAIL_POPOVER_GAP = 8;
+// Include 10pt breathing room around the 56pt strip and 304pt popover so soft shadows never clip.
+export const RAIL_WIDTH = 76;
+export const RAIL_POPOVER_WIDTH = 304;
+export const RAIL_POPOVER_WINDOW_WIDTH = RAIL_POPOVER_WIDTH + 20;
+// Both windows carry 10pt transparent shadow padding; overlapping by 10pt keeps a 10pt card gap with zero dead zone.
+export const RAIL_POPOVER_WINDOW_OVERLAP = 10;
+export const RAIL_POPOVER_GAP = 10;
 export const RAIL_HOVER_WIDTH = RAIL_WIDTH + RAIL_POPOVER_GAP + RAIL_POPOVER_WIDTH;
 export const EDGE_SNAP_THRESHOLD = 28;
 
@@ -26,10 +30,10 @@ export function isRailMode(mode: WindowMode): boolean {
   return mode === "rail" || mode === "railHover" || mode === "railSliver";
 }
 
-/** Compute the logical height of the vertical side rail for 1–3 enabled sources. */
+/** Compute the logical height of the vertical side rail (with shadow padding) for 1–3 enabled sources. */
 export function railHeight(enabledCount: number): number {
   const count = Math.max(1, Math.min(3, enabledCount));
-  return 54 + count * 48;
+  return 82 + count * 52;
 }
 
 /** Keep logical dimensions inside the monitor's physical work area. */
@@ -128,19 +132,13 @@ export function snapRailPosition(
 ): { x: number; y: number; snappedEdge: RailEdge | null } {
   const display = findDisplay(position, size, displays) ?? fallback;
   const area = display.workArea;
-  const inset = 4 * display.scaleFactor;
-  const leftX = area.position.x + inset;
+  // The rail canvas already carries 11pt internal shadow padding, so outer inset stays 0.
+  const leftX = area.position.x;
   const rightX =
-    area.position.x +
-    area.size.width -
-    size.width * display.scaleFactor -
-    inset;
-  const minY = area.position.y + inset;
+    area.position.x + area.size.width - size.width * display.scaleFactor;
+  const minY = area.position.y;
   const maxY =
-    area.position.y +
-    area.size.height -
-    size.height * display.scaleFactor -
-    inset;
+    area.position.y + area.size.height - size.height * display.scaleFactor;
   const clampedY = Math.round(Math.min(maxY, Math.max(minY, position.y)));
   const snapDist = threshold * display.scaleFactor;
 
@@ -181,21 +179,17 @@ export function railHoverFrame(
   const fitted = fitSize(hoverSize, display);
   const area = display.workArea;
   const scale = display.scaleFactor;
-  const inset = 4 * scale;
 
   // Fallback anchor when no saved coordinates exist yet.
   const base =
     anchor.x != null && anchor.y != null
       ? { x: anchor.x, y: anchor.y }
-      : railFrame(preferredEdge, anchor, railSize, displays, fallback, 4);
+      : railFrame(preferredEdge, anchor, railSize, displays, fallback, 0);
 
   const extraW = Math.max(0, fitted.width - railSize.width) * scale;
-  const spaceLeft = base.x - (area.position.x + inset);
+  const spaceLeft = base.x - area.position.x;
   const spaceRight =
-    area.position.x +
-    area.size.width -
-    inset -
-    (base.x + railSize.width * scale);
+    area.position.x + area.size.width - (base.x + railSize.width * scale);
 
   let popoverSide: RailEdge;
   if (preferredEdge === "left" && spaceRight >= extraW) {
@@ -207,10 +201,10 @@ export function railHoverFrame(
   }
 
   const rawX = popoverSide === "left" ? base.x - extraW : base.x;
-  const minX = area.position.x + inset;
-  const maxX = area.position.x + area.size.width - fitted.width * scale - inset;
-  const minY = area.position.y + inset;
-  const maxY = area.position.y + area.size.height - fitted.height * scale - inset;
+  const minX = area.position.x;
+  const maxX = area.position.x + area.size.width - fitted.width * scale;
+  const minY = area.position.y;
+  const maxY = area.position.y + area.size.height - fitted.height * scale;
   const clampedY = Math.round(Math.min(maxY, Math.max(minY, base.y)));
   const maxOffsetY = Math.max(0, Math.floor(fitted.height - railSize.height));
   const railOffsetY = Math.max(
@@ -228,6 +222,65 @@ export function railHoverFrame(
 }
 
 /**
+ * Compute the screen frame of the separate rail-popover window adjacent to a stationary rail strip.
+ * Keeps the rail window untouched while clamping the popover inside the monitor work area.
+ */
+export function railPopoverFrame(
+  railAnchor: { x: number | null; y: number | null },
+  preferredEdge: RailEdge,
+  railSize: WindowSize,
+  popoverSize: WindowSize,
+  displays: Display[],
+  fallback: Display,
+): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  popoverSide: RailEdge;
+} {
+  const display = findDisplay(railAnchor, railSize, displays) ?? fallback;
+  const fitted = fitSize(popoverSize, display);
+  const area = display.workArea;
+  const scale = display.scaleFactor;
+
+  const base =
+    railAnchor.x != null && railAnchor.y != null
+      ? { x: railAnchor.x, y: railAnchor.y }
+      : railFrame(preferredEdge, railAnchor, railSize, displays, fallback, 0);
+
+  const stepW = (fitted.width - RAIL_POPOVER_WINDOW_OVERLAP) * scale;
+  const spaceLeft = base.x - area.position.x;
+  const spaceRight =
+    area.position.x + area.size.width - (base.x + railSize.width * scale);
+
+  let popoverSide: RailEdge;
+  if (preferredEdge === "left" && spaceRight >= stepW) {
+    popoverSide = "right";
+  } else if (preferredEdge === "right" && spaceLeft >= stepW) {
+    popoverSide = "left";
+  } else {
+    popoverSide = spaceLeft >= spaceRight ? "left" : "right";
+  }
+
+  const rawX =
+    popoverSide === "left"
+      ? base.x - stepW
+      : base.x + (railSize.width - RAIL_POPOVER_WINDOW_OVERLAP) * scale;
+  const minX = area.position.x;
+  const maxX = area.position.x + area.size.width - fitted.width * scale;
+  const minY = area.position.y;
+  const maxY = area.position.y + area.size.height - fitted.height * scale;
+
+  return {
+    ...fitted,
+    x: Math.round(Math.min(maxX, Math.max(minX, rawX))),
+    y: Math.round(Math.min(maxY, Math.max(minY, base.y))),
+    popoverSide,
+  };
+}
+
+/**
  * Anchor a side-rail strictly to the chosen screen edge (used for first launch, sliver, or explicit edge switch).
  */
 export function railFrame(
@@ -236,7 +289,7 @@ export function railFrame(
   size: WindowSize,
   displays: Display[],
   fallback: Display,
-  insetLogical = 4,
+  insetLogical = 0,
 ) {
   const display = findDisplay(anchor, size, displays) ?? fallback;
   const fitted = fitSize(size, display);

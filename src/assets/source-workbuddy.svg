@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <radialGradient id="wb-bg" cx="50%" cy="46%" r="68%">
+      <stop offset="0%" stop-color="#17b982" />
+      <stop offset="48%" stop-color="#0a6b4f" />
+      <stop offset="100%" stop-color="#04261f" />
+    </radialGradient>
+    <linearGradient id="wb-glass" x1="20%" y1="10%" x2="80%" y2="92%">
+      <stop offset="0%" stop-color="#d7fff0" stop-opacity="0.96" />
+      <stop offset="45%" stop-color="#6ee7b7" stop-opacity="0.72" />
+      <stop offset="100%" stop-color="#10b981" stop-opacity="0.88" />
+    </linearGradient>
+    <linearGradient id="wb-body" x1="50%" y1="12%" x2="50%" y2="95%">
+      <stop offset="0%" stop-color="#48e5ae" stop-opacity="0.42" />
+      <stop offset="55%" stop-color="#0d8a64" stop-opacity="0.48" />
+      <stop offset="100%" stop-color="#064031" stop-opacity="0.65" />
+    </linearGradient>
+    <linearGradient id="wb-visor" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#052b22" stop-opacity="0.92" />
+      <stop offset="100%" stop-color="#0a4a3a" stop-opacity="0.86" />
+    </linearGradient>
+    <linearGradient id="wb-eye" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ecfdf5" />
+      <stop offset="100%" stop-color="#6ee7b7" />
+    </linearGradient>
+    <filter id="wb-glow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="3.5" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="128" height="128" fill="url(#wb-bg)" />
+
+  <!-- Subtle ambient mint halo -->
+  <circle cx="64" cy="64" r="44" fill="#34d399" opacity="0.14" />
+
+  <!-- Symmetrical buddy ear antennas -->
+  <rect x="29" y="21" width="12" height="24" rx="6" transform="rotate(-24 35 33)" fill="url(#wb-glass)" opacity="0.92" />
+  <rect x="87" y="21" width="12" height="24" rx="6" transform="rotate(24 93 33)" fill="url(#wb-glass)" opacity="0.92" />
+
+  <!-- Frosted glass robot buddy head -->
+  <rect x="22" y="34" width="84" height="68" rx="30" fill="url(#wb-body)" stroke="url(#wb-glass)" stroke-width="5.5" />
+
+  <!-- Top glass specular arc -->
+  <path d="M40 42 C52 38 76 38 88 42" fill="none" stroke="#ecfdf5" stroke-width="3" stroke-linecap="round" opacity="0.65" />
+
+  <!-- Dark sleek glass visor band (keeps center crisp for white 5h overlay) -->
+  <rect x="33" y="48" width="62" height="36" rx="18" fill="url(#wb-visor)" stroke="#86efac" stroke-opacity="0.45" stroke-width="1.8" />
+
+  <!-- Friendly glowing buddy eyes positioned near visor edges -->
+  <rect x="42" y="59" width="9" height="14" rx="4.5" fill="url(#wb-eye)" filter="url(#wb-glow)" opacity="0.95" />
+  <rect x="77" y="59" width="9" height="14" rx="4.5" fill="url(#wb-eye)" filter="url(#wb-glow)" opacity="0.95" />
+
+  <!-- Subtle happy chin accent -->
+  <path d="M54 91 Q64 96 74 91" fill="none" stroke="#a7f3d0" stroke-width="3" stroke-linecap="round" opacity="0.72" />
+</svg>

@@ -1,12 +1,16 @@
 use serde::Serialize;
-use std::sync::OnceLock;
-use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use serde_json::Value;
+use std::sync::{Mutex, OnceLock};
+use tauri::{Emitter, LogicalSize, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 static RAIL_APP: OnceLock<tauri::AppHandle> = OnceLock::new();
+static RAIL_POPOVER_STATE: Mutex<Option<Value>> = Mutex::new(None);
+const RAIL_POPOVER_LABEL: &str = "rail-popover";
 
 #[derive(Clone, Serialize)]
 struct RailPointerEvent {
     inside: bool,
+    target: &'static str,
     x: f64,
     y: f64,
 }
@@ -32,15 +36,151 @@ extern "C" {
     fn cq_set_rail_pointer_monitor(
         window: *mut std::ffi::c_void,
         enabled: bool,
-        callback: extern "C" fn(bool, f64, f64),
+        callback: extern "C" fn(i32, f64, f64),
     );
+    fn cq_configure_rail_popover(popover: *mut std::ffi::c_void, main: *mut std::ffi::c_void);
+    fn cq_show_rail_popover(popover: *mut std::ffi::c_void, main: *mut std::ffi::c_void);
+    fn cq_hide_rail_popover(popover: *mut std::ffi::c_void);
 }
 
 #[cfg(target_os = "macos")]
-extern "C" fn on_rail_pointer(inside: bool, x: f64, y: f64) {
+extern "C" fn on_rail_pointer(target: i32, x: f64, y: f64) {
     if let Some(app) = RAIL_APP.get() {
-        let _ = app.emit("rail-pointer", RailPointerEvent { inside, x, y });
+        let label = match target {
+            1 => "rail",
+            2 => "popover",
+            _ => "none",
+        };
+        let _ = app.emit_to(
+            "main",
+            "rail-pointer",
+            RailPointerEvent {
+                inside: target != 0,
+                target: label,
+                x,
+                y,
+            },
+        );
     }
+}
+
+/// Lazily create and configure the dedicated transparent hover-popover window so the rail strip never resizes.
+fn ensure_rail_popover_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
+    if let Some(existing) = app.get_webview_window(RAIL_POPOVER_LABEL) {
+        return Ok(existing);
+    }
+    let popover = WebviewWindowBuilder::new(
+        app,
+        RAIL_POPOVER_LABEL,
+        WebviewUrl::App("index.html?view=rail-popover".into()),
+    )
+    .title("额度详情")
+    .inner_size(324.0, 296.0)
+    .resizable(false)
+    .decorations(false)
+    .transparent(true)
+    .shadow(false)
+    .visible(false)
+    .focused(false)
+    .skip_taskbar(true)
+    .build()
+    .map_err(|_| "无法创建侧边详情悬浮窗".to_string())?;
+    #[cfg(target_os = "macos")]
+    if let Ok(pop_ptr) = popover.ns_window() {
+        let main_ptr = app
+            .get_webview_window("main")
+            .and_then(|w| w.ns_window().ok())
+            .unwrap_or(std::ptr::null_mut());
+        unsafe {
+            cq_configure_rail_popover(pop_ptr, main_ptr);
+        }
+    }
+    Ok(popover)
+}
+
+/// Hide the dedicated rail-popover window whenever the rail closes, drags, or leaves rail mode.
+pub fn hide_rail_popover_window(app: &tauri::AppHandle) {
+    if let Some(popover) = app.get_webview_window(RAIL_POPOVER_LABEL) {
+        #[cfg(target_os = "macos")]
+        if let Ok(pop_ptr) = popover.ns_window() {
+            unsafe {
+                cq_hide_rail_popover(pop_ptr);
+            }
+            return;
+        }
+        let _ = popover.hide();
+    }
+}
+
+#[tauri::command]
+/// Pre-create the hidden popover WebView when entering rail mode so the first hover opens instantaneously.
+pub fn prewarm_rail_popover(app: tauri::AppHandle) -> Result<(), String> {
+    let _ = ensure_rail_popover_window(&app)?;
+    Ok(())
+}
+
+#[tauri::command]
+/// Position, sync state, and reveal the separate hover popover without moving or resizing the main rail window.
+pub fn show_rail_popover(
+    app: tauri::AppHandle,
+    x: i32,
+    y: i32,
+    width: f64,
+    height: f64,
+    state: Value,
+) -> Result<(), String> {
+    if let Ok(mut slot) = RAIL_POPOVER_STATE.lock() {
+        *slot = Some(state.clone());
+    }
+    let popover = ensure_rail_popover_window(&app)?;
+    let _ = app.emit_to(RAIL_POPOVER_LABEL, "rail-popover-state", &state);
+    let _ = popover.set_size(LogicalSize::new(width, height));
+    let _ = popover.set_position(PhysicalPosition::new(x, y));
+    #[cfg(target_os = "macos")]
+    if let Ok(pop_ptr) = popover.ns_window() {
+        let main_ptr = app
+            .get_webview_window("main")
+            .and_then(|w| w.ns_window().ok())
+            .unwrap_or(std::ptr::null_mut());
+        unsafe {
+            cq_show_rail_popover(pop_ptr, main_ptr);
+        }
+        return Ok(());
+    }
+    let _ = popover.show();
+    Ok(())
+}
+
+#[tauri::command]
+/// Push live quota/closing updates to an already visible popover window without touching window geometry.
+pub fn sync_rail_popover(app: tauri::AppHandle, state: Value) -> Result<(), String> {
+    if let Ok(mut slot) = RAIL_POPOVER_STATE.lock() {
+        *slot = Some(state.clone());
+    }
+    if app.get_webview_window(RAIL_POPOVER_LABEL).is_some() {
+        let _ = app.emit_to(RAIL_POPOVER_LABEL, "rail-popover-state", &state);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+/// Hide the separate hover popover window after its close fade completes.
+pub fn hide_rail_popover(app: tauri::AppHandle) -> Result<(), String> {
+    hide_rail_popover_window(&app);
+    Ok(())
+}
+
+#[tauri::command]
+/// Return the latest popover payload when the popover WebView mounts for the first time.
+pub fn get_rail_popover_state() -> Option<Value> {
+    RAIL_POPOVER_STATE.lock().ok().and_then(|slot| slot.clone())
+}
+
+#[tauri::command]
+/// Forward interactive actions clicked inside the separate popover window back to the main window.
+pub fn rail_popover_action(app: tauri::AppHandle, action: Value) -> Result<(), String> {
+    let _ = app.emit_to("main", "rail-popover-action", action);
+    Ok(())
 }
 
 #[tauri::command]
@@ -81,7 +221,10 @@ pub fn set_window_chrome(
     window: tauri::WebviewWindow,
     rectangular: bool,
 ) -> Result<(), String> {
-    let _ = RAIL_APP.set(app);
+    let _ = RAIL_APP.set(app.clone());
+    if rectangular {
+        hide_rail_popover_window(&app);
+    }
     #[cfg(target_os = "macos")]
     {
         let pointer = window.ns_window().map_err(|e| e.to_string())?;
@@ -113,27 +256,32 @@ pub fn disarm_top_hide() {
     }
 }
 
-/// Apply native window capture protection and vibrant appearance to the floating card.
+/// Apply native window capture protection and vibrant appearance to the floating card and rail popover.
 pub fn apply_main_window_flags(app: &tauri::AppHandle, hide_from_capture: bool, theme: &str) {
     #[cfg(target_os = "macos")]
-    if let Some(window) = app.get_webview_window("main") {
-        if let Ok(pointer) = window.ns_window() {
-            let mode = match theme {
-                "light" => 1,
-                "dark" => 2,
-                _ => 0,
-            };
-            unsafe {
-                cq_set_hide_from_capture(pointer, hide_from_capture);
-                cq_set_window_appearance(pointer, mode);
+    {
+        let mode = match theme {
+            "light" => 1,
+            "dark" => 2,
+            _ => 0,
+        };
+        for label in ["main", RAIL_POPOVER_LABEL] {
+            if let Some(window) = app.get_webview_window(label) {
+                if let Ok(pointer) = window.ns_window() {
+                    unsafe {
+                        cq_set_hide_from_capture(pointer, hide_from_capture);
+                        cq_set_window_appearance(pointer, mode);
+                    }
+                }
             }
         }
     }
 }
 
-/// Tray hiding also removes the parking indicator and cursor timer.
+/// Tray hiding also removes the parking indicator, cursor timer, and any visible rail popover.
 pub fn hide_card(window: &tauri::WebviewWindow) {
     disarm_top_hide();
+    hide_rail_popover_window(window.app_handle());
     let _ = window.hide();
 }
 
