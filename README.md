@@ -4,9 +4,13 @@
 
 > 动机很简单：Codex 经常在额度耗尽时"暴毙"，写代码写到一半才发现没额度了。与其被动挨打，不如把额度常驻在桌面上盯着。
 
-| 展开态 | 迷你条 | 精简态 |
-| --- | --- | --- |
-| ![展开态](docs/screenshots/expanded-localized.png) | ![迷你条](docs/screenshots/mini-bar.png) | ![精简态](docs/screenshots/compact-account.png) |
+| 仪表盘圆环条 + 独立悬浮详情（暗黑玻璃） | 展开卡片（三来源 + 订阅有效期） |
+| --- | --- |
+| ![仪表盘圆环条与悬浮详情](docs/screenshots/rail-hover.png) | ![展开卡片](docs/screenshots/expanded-card.png) |
+
+| 三来源迷你总览横条 | 独立控制中心 · 本地 Token 用量统计 |
+| --- | --- |
+| ![三来源迷你条](docs/screenshots/mini-bar.png) | ![Token 用量统计](docs/screenshots/dashboard-usage.png) |
 
 ## 功能特性
 
